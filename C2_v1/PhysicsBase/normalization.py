@@ -32,7 +32,7 @@ def build_normalization_scales(
         material,
         temperature_k,
     )
-    epsilon = material.permittivity_f_per_cm
+    epsilon = material.epsilon_s
     if not isfinite(n0) or n0 <= 0.0:
         raise ValueError(
             "intrinsic concentration must be positive and finite"

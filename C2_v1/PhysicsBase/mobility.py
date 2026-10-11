@@ -22,7 +22,7 @@ class MobilityModel(ABC):
                 "temperature_k must be finite and > 0"
             )
         if (doping_per_cm3 is not None) and (
-            (not isfinite(doping_per_cm3) or doping_per_cm3 <= 0)):
+            (not isfinite(doping_per_cm3) or doping_per_cm3 < 0)):
              raise ValueError(
                 "doping_per_cm3 must be finite and >= 0"
             )
@@ -54,6 +54,7 @@ class MobilityModel(ABC):
         return result
     @abstractmethod
     def _calculate(
+            self,
             material:Material,
             temperature_k:float,
             doping_per_cm3: float | None = None,
@@ -62,6 +63,7 @@ class MobilityModel(ABC):
         ...
 class ConstantMobilityModel(MobilityModel):
     def _calculate(
+        self,
         material:Material,
         temperature_k:float,
         doping_per_cm3: float | None = None,

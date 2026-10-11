@@ -1,7 +1,7 @@
 #扩散迁移率由Einstein关系给出
 from dataclasses import dataclass
 from PhysicsBase.thermal_voltage import thermal_voltage
-from mobility import Mobilities
+from PhysicsBase.mobility import Mobilities
 @dataclass(frozen = True,slots = True)
 class DiffusionCoefficients:
     electron_cm2_per_s: float
