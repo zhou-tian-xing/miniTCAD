@@ -1,0 +1,73 @@
+# PN orientation: LEFT=P (x=0), RIGHT=N (x=L)
+# V_app = V_left - V_right; V_app > 0 is forward bias; right terminal = 0 V.
+# Input: cm engineering units; dimensionless physics core; SI only via adapters.
+
+units:
+  system: cm                  # 输入物理量必须声明，项目默认工程单位为 cm
+
+device:
+  type: pn
+  orientation: p_left_n_right
+  length_cm: 1.0e-3
+  area_cm2: 1.0e-4
+  temperature_K: 300.0        # 示例温度；不可把 300 K 当作隐含固定材料模型
+
+material:
+  name: silicon
+  # 以下参数仅针对本示例 T=300 K；改 T 必须重审 n_i/迁移率（第 2.4 节）
+  epsilon_relative: 11.7
+  intrinsic_density_cm3: 1.0e+10
+  mobility_n_cm2_per_Vs: 1350.0
+  mobility_p_cm2_per_Vs: 480.0
+  lifetime_n_s: 1.0e-6
+  lifetime_p_s: 2.0e-6
+  bandgap_eV: 1.12
+
+regions:
+  - start_cm: 0.0
+    end_cm: 2.5e-4
+    material: silicon
+    acceptor_cm3: 1.0e+16
+    donor_cm3: 0.0
+  - start_cm: 2.5e-4
+    end_cm: 1.0e-3
+    material: silicon
+    acceptor_cm3: 0.0
+    donor_cm3: 2.0e+15
+
+mesh:
+  type: uniform
+  nodes: 201
+
+normalization:
+  reference_diffusivity_cm2_s: 10.0   # 明确指定 D0[cm²/s]；与 μ0 参数化二选一（第 3.5 节）
+
+contacts:
+  type: ideal_ohmic
+  left_terminal: p
+  right_terminal: n
+  right_voltage_V: 0.0
+  bias_definition: left_minus_right
+
+solver:
+  method: newton              # or gummel
+  jacobian: sparse_fd
+  tol_residual: 1.0e-8
+  tol_update: 1.0e-6
+  max_iter: 60
+  alpha_min: 1.0e-6
+  positive_scale_floor: 1.0e-15
+
+sweep:
+  start_V: 0.0
+  stop_V: 0.6
+  initial_step_V: 0.05
+  min_step_V: 0.005
+  max_step_V: 0.1
+  grow_factor: 1.25
+  shrink_factor: 0.5
+
+output:
+  directory: runs/pn_example
+  unit_system: cm             # 默认 cm；如须交付 SI 文件，改为 si，只有 writer 转换
+  # Names are fixed: comparison.csv, comparison.png, convergence.md

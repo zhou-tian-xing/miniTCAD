@@ -1,0 +1,58 @@
+# PN orientation: LEFT=P (x=0), RIGHT=N (x=L)
+# V_app = V_left - V_right; V_app > 0 is forward bias; right terminal = 0 V.
+# Input: SI units; the input adapter converts SI -> cm before normalization (第 3.3 节).
+# This file describes the SAME physical device as pn_left_p_right_n.yaml;
+# build_device() must yield the same dimensionless device for both.
+
+units:
+  system: si
+
+device:
+  type: pn
+  orientation: p_left_n_right
+  length_m: 1.0e-5            # = 1.0e-3 cm
+  area_m2: 1.0e-8             # = 1.0e-4 cm^2
+  temperature_K: 300.0
+
+material:
+  name: silicon
+  epsilon_relative: 11.7
+  intrinsic_density_m3: 1.0e+16      # = 1.0e+10 cm^-3
+  mobility_n_m2_per_Vs: 0.135        # = 1350 cm^2/(V s)
+  mobility_p_m2_per_Vs: 0.048        # = 480 cm^2/(V s)
+  lifetime_n_s: 1.0e-6
+  lifetime_p_s: 2.0e-6
+  bandgap_eV: 1.12
+
+regions:
+  - start_m: 0.0
+    end_m: 2.5e-6
+    material: silicon
+    acceptor_m3: 1.0e+22             # = 1.0e+16 cm^-3
+    donor_m3: 0.0
+  - start_m: 2.5e-6
+    end_m: 1.0e-5
+    material: silicon
+    acceptor_m3: 0.0
+    donor_m3: 2.0e+21                # = 2.0e+15 cm^-3
+
+mesh:
+  type: uniform
+  nodes: 201
+
+normalization:
+  reference_diffusivity_m2_s: 1.0e-3   # = 10 cm^2/s
+
+contacts:
+  type: ideal_ohmic
+  left_terminal: p
+  right_terminal: n
+  right_voltage_V: 0.0
+  bias_definition: left_minus_right
+
+solver:
+  method: newton
+
+output:
+  directory: runs/pn_example_si
+  unit_system: si
