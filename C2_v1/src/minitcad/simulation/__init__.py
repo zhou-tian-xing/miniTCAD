@@ -1,0 +1,1 @@
+from minitcad.simulation.equilibrium import solve_equilibrium_scalar

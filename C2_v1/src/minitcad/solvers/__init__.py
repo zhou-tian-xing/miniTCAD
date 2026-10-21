@@ -1,0 +1,1 @@
+from minitcad.solvers.gummel import solve_gummel
