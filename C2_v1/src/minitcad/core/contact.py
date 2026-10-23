@@ -68,3 +68,29 @@ def contact_targets(device: object, bias_V: float) -> tuple[float, float, float,
     u_l = contact_potential_nd(device.net_doping_left_nd) + v
     u_r = contact_potential_nd(device.net_doping_right_nd)
     return u_l, n_l, p_l, u_r, n_r, p_r
+
+def contact_targets_qf(
+    device,
+    bias_V: float,
+    *,
+    ref_n: float = 0.0,
+    ref_p: float = 0.0,
+) -> tuple[float, float, float, float, float, float]:
+    """
+    Return:
+        (uL, eta_nL, eta_pL, uR, eta_nR, eta_pR)
+    """
+    import math
+
+    u_l, n_l, p_l, u_r, n_r, p_r = contact_targets(
+        device, bias_V
+    )
+
+    return (
+        u_l,
+        math.log(n_l) - u_l - ref_n,
+        -math.log(p_l) - u_l - ref_p,
+        u_r,
+        math.log(n_r) - u_r - ref_n,
+        -math.log(p_r) - u_r - ref_p,
+    )

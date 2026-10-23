@@ -5,17 +5,20 @@ import numpy as np
 from numpy.typing import NDArray,ArrayLike
 from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
-from minitcad.core.state import State,SolveResult
+from minitcad.core.state import State,SolveResult,QFState,PhysicsDiagnostics
+from minitcad.core.contact import contact_targets_qf
 from minitcad.core.device import NormalizedDevice
 from minitcad import discretization,physics
 from minitcad.discretization.sg import edge_flux_qf
-from minitcad.discretization.residual import residual_qf
+from minitcad.discretization.residual import residual_qf,ResidualEvaluation,evaluate_qf
+'''
 def _state(u:NDArray,fn:NDArray,fp:NDArray) -> State:
     n = np.exp(u + fn)
     p = np.exp(-u - fp)
     return State(u,n,p)
 def _quasi_fermi(s:State) -> tuple[NDArray,NDArray]:
     return (np.log(s.n) - s.u,-np.log(s.p) - s.u)
+'''
 def _solve_tridiagonal(diagonal,left,right,rhs):
     matrix = diags(
         (left[1:],diagonal,right[:-1]),
@@ -33,7 +36,9 @@ def _poisson_step(device:NormalizedDevice,u0,fn,fp,targets,*,max_iter = 35):
     u = u0.copy()
     u[0],u[-1] = targets[0],targets[3]
     def evaluate(potential):
-        s = _state(potential,fn,fp)
+        n = np.exp(potential + fn)
+        p = np.exp(-potential - fp)
+        s = State(u = potential,n = n,p = p)
         f = discretization.poisson_residual_nd(device.mesh.x_nodes_nd,
                                                s.u,s.n,s.p,device.cbar_nd,targets[0],targets[3])
         scale = np.maximum.reduce((
@@ -185,48 +190,51 @@ def _scaled_update(
     ))
 #费米能级部分
 def _scaled_residual_qf(
-        device:NormalizedDevice,
-        bias_V,
-        u,
-        fn,
-        fp,*,
-        ref_n = 0.0,
-        ref_p = 0.0
+        qf : QFState,
+        device : NormalizedDevice,
+        bias_V : float,
+        evaluation : ResidualEvaluation,
+        physical : State | None = None
 ):
-    m = u.size
-    f,flux,rate = residual_qf(device,bias_V,u,fn,fp,ref_n = ref_n,ref_p = ref_p)
-    n = np.exp(u + ref_n + fn)
-    p = np.exp(-u - ref_p - fp)
+    if physical is None:
+        physical = qf.to_physical()
+    m = qf.node_count
+    f = evaluation.f.reshape(m,3)
+    flux = evaluation.fluxes
+    rate = evaluation.recombination_nd
     w = device.mesh.w_interior_nd
-    t = device.contact_targets(bias_V = bias_V)
-    scale = np.empty((m,3))
+    scale = np.empty((m,3),dtype = np.float64)
     scale[1:-1,0] = np.maximum.reduce((
         np.ones(m - 2),
-        abs(device.cbar_nd),
-        n[1:-1],
-        p[1:-1]
+        np.abs(device.cbar_nd),
+        physical.n[1:-1],
+        physical.p[1:-1]
     ))
     scale[1:-1,1] = np.maximum.reduce((
         np.ones(m - 2),
-        abs(flux.jn_edges[:-1]) / w,
-        abs(flux.jn_edges[1:]) / w,
-        abs(rate[1:-1])
+        np.abs(flux.jn_edges[1:]) / w,
+        np.abs(flux.jn_edges[:-1]) / w,
+        np.abs(rate[1:-1])
     ))
     scale[1:-1,2] = np.maximum.reduce((
         np.ones(m - 2),
-        abs(flux.jp_edges[:-1]) / w,
-        abs(flux.jp_edges[1:]) / w,
-        abs(rate[1:-1])
+        np.abs(flux.jp_edges[1:]) / w,
+        np.abs(flux.jp_edges[:-1]) / w,
+        np.abs(rate[1:-1])
     ))
-    scale[0, : ] = np.maximum(
+    targets = contact_targets_qf(device = device,bias_V = bias_V,ref_n = qf.ref_n,ref_p = qf.ref_p)
+    scale[0] = np.maximum(
         1.0,
-        abs(np.asarray(t[:3]))
+        np.abs(targets[:3])
     )
-    scale[-1, : ] = np.maximum(
+    scale[-1] = np.maximum(
         1.0,
-        abs(np.asarray(t[3:]))
+        np.abs(targets[3:])
     )
-    return float(np.max(abs(f) / scale))
+    rn = float(np.max(np.abs(f) / scale))
+    if not np.isfinite(rn):
+        raise FloatingPointError("NONFINITE_SCALED_RESIDUAL")
+    return rn
 def _qf_carrier_step(
     device:NormalizedDevice,
     u,
@@ -268,7 +276,7 @@ def _qf_carrier_step(
             device.mu_n_nd,
             device.mu_p_nd,
             ref_n = ref_n,
-            ref_p = ref_p,
+            ref_p = ref_p
         )
         r = np.expm1(
             (ref_n - ref_p)
@@ -358,6 +366,54 @@ def _qf_carrier_step(
     name = "ELECTRON" if electron else "HOLE"
     raise ArithmeticError(
         f"{name}_INNER_MAX_ITER rn={rn:.3g}"
+    )
+def _project_contacts(
+        qf : QFState,
+        targets : tuple
+) -> QFState:
+    u = qf.u.copy()
+    eta_n = qf.eta_n.copy()
+    eta_p = qf.eta_p.copy()
+    u[0],u[-1] = targets[0],targets[3]
+    eta_n[0],eta_n[-1] = targets[1],targets[4]
+    eta_p[0],eta_p[-1] = targets[2],targets[5]
+    return QFState(
+        u = u,
+        eta_n = eta_n,
+        eta_p = eta_p,
+        ref_n = qf.ref_n,
+        ref_p = qf.ref_p
+    )
+def _interpolate_qf(
+    old : QFState,
+    residual : QFState,
+    alpha : float
+) -> QFState:
+    if (
+        old.ref_n != residual.ref_n
+        or old.ref_p != residual.ref_p
+    ):
+        raise ValueError(
+            "QF reference changed during iteration"
+        )
+    return QFState(
+        u = old.u + alpha * (
+            residual.u - old.u
+        ),
+        eta_n = old.eta_n + alpha * (
+            residual.eta_n - old.eta_n
+        ),
+        eta_p = old.eta_p + alpha * (
+            residual.eta_p - old.eta_p
+        ),
+        ref_n = old.ref_n,
+        ref_p = old.ref_p
+    )
+def _physics_from_evaluation(ev : ResidualEvaluation) -> PhysicsDiagnostics:
+    return PhysicsDiagnostics(
+        fluxes = ev.fluxes,
+        recombination_nd = ev.recombination_nd,
+        residual_qf_nd = ev.f
     )
 """
 def solve_gummel(
@@ -508,255 +564,237 @@ def solve_gummel(
         tuple(history)
     )
 """
-#以下是vibecoding
 def solve_gummel(
-    device: NormalizedDevice,
-    bias_V: float,
-    initial_state: State,
+    device : NormalizedDevice,
+    bias_V : float,
+    initial_state : State,
     *,
-    tol_residual=1e-8,
-    tol_update=1e-6,
-    max_iter=60,
-    alpha_min=1e-6,
-    n_floor=1e-15,
-    diagnostics=None,
+    tol_residual : float = 1e-8,
+    tol_update : float = 1e-6,
+    max_iter : int = 60,
+    alpha_min : float = 1e-6,
+    n_floor : float = 1e-15,
+    diagnostics : dict | None = None,
 ) -> SolveResult:
+    """
+    QF-based Gummel solver.
+    Public input:
+        State(u, n, p)
+    Internal unknowns:
+        QFState(u, eta_n, eta_p, ref_n, ref_p)
+    Public output:
+        SolveResult containing physical State and
+        stable PhysicsDiagnostics.
+    """
     if initial_state.node_count != device.mesh.node_count:
         raise ValueError(
             "device/state node_count mismatch"
         )
-    for name, x in [
-        ("bias_V", bias_V),
-        ("tol_residual", tol_residual),
-        ("tol_update", tol_update),
-        ("alpha_min", alpha_min),
-        ("n_floor", n_floor),
-    ]:
-        if (
-            not np.isfinite(x).all()
-            or (name != "bias_V" and x <= 0)
-        ):
-            raise ValueError(f"invalid {name}")
-    if alpha_min > 1:
-        raise ValueError("alpha_min must be <= 1")
-    if (
-        isinstance(max_iter, bool)
-        or not isinstance(max_iter, (int, np.integer))
-        or max_iter < 1
+    for name,value in (
+        ("bias_V",bias_V),
+        ("tol_residual",tol_residual),
+        ("tol_update",tol_update),
+        ("alpha_min",alpha_min),
+        ("n_floor",n_floor)
     ):
-        raise ValueError(
-            "max_iter must be positive integer"
-        )
+        if isinstance(value,(bool,np.bool_)) or not isinstance(value,(int,float,np.integer,np.floating)) or not np.isfinite(value) or (name != "bias_V" and value <= 0):
+            raise ValueError(f"invalid {name}")
+    if alpha_min > 1.0:
+        raise ValueError("alpha_min must be <= 1")
+    if (isinstance(max_iter,bool) or not isinstance(max_iter,(int,np.integer)) or
+        max_iter < 1
+    ):
+        raise ValueError("max_iter must be a positive integer")
     if diagnostics is not None:
         diagnostics.clear()
-    t = device.contact_targets(bias_V)
-    u = initial_state.u.copy()
-    fn, fp = _quasi_fermi(initial_state)
-    ref_n = np.log(t[4]) - t[3]
-    ref_p = -np.log(t[2]) - t[0]
-    fn -= ref_n
-    fp -= ref_p
-    u[0], u[-1] = t[0], t[3]
-    fn[0] = np.log(t[1]) - t[0] - ref_n
-    fn[-1] = 0.0
-    fp[0] = 0.0
-    fp[-1] = -np.log(t[5]) - t[3] - ref_p
-    history = []
-    def save_diagnostics():
-        if diagnostics is not None:
-            ff, currents, rate = residual_qf(
-                device,
-                bias_V,
-                u,
-                fn,
-                fp,
-                ref_n=ref_n,
-                ref_p=ref_p,
-            )
-            diagnostics.update({
-                "u": u.copy(),
-                "eta_n": fn.copy(),
-                "eta_p": fp.copy(),
-                "ref_n": float(ref_n),
-                "ref_p": float(ref_p),
-                "jn_edges": currents.jn_edges.copy(),
-                "jp_edges": currents.jp_edges.copy(),
-                "rate": rate.copy(),
-                "residual": ff.copy(),
-            })
-    try:
-        old = _state(
-            u,
-            fn + ref_n,
-            fp + ref_p,
-        )
-        rn = _scaled_residual_qf(
-            device,
-            bias_V,
-            u,
-            fn,
-            fp,
-            ref_n=ref_n,
-            ref_p=ref_p,
-        )
-    except Exception:
+    targets = device.contact_targets(bias_V)#(uL,nL,pL,uR,nR,pR)
+    ref_n = float(np.log(targets[4]) - targets[3])
+    ref_p = float(-np.log(targets[2]) - targets[0])
+    targets_qf = contact_targets_qf(
+        device = device,
+        bias_V = bias_V,
+        ref_n = ref_n,
+        ref_p = ref_p,
+    )
+    history : list[dict] = []
+    def make_result(
+        ok : bool,
+        iterations : int,
+        rn : float,
+        dn : float,
+        reason : str,
+        qf : QFState | None = None,
+        ev : ResidualEvaluation = None,
+        physical : State | None = None,
+    ) -> SolveResult:
+        physics = None
+        if ok:
+            if qf is None or ev is None or physical is None:
+                raise RuntimeError("Successful solve missing final state")
+            physics = _physics_from_evaluation(ev)
+            # Transitional debug API for older tests.
+            if diagnostics is not None:
+                diagnostics.update({
+                    "u" : qf.u.copy(),
+                    "eta_n" : qf.eta_n.copy(),
+                    "eta_p" : qf.eta_p.copy(),
+                    "ref_n" : float(qf.ref_n),
+                    "ref_p" : float(qf.ref_p),
+                    "jn_edges" : ev.fluxes.jn_edges.copy(),
+                    "jp_edges" : ev.fluxes.jp_edges.copy(),
+                    "rate" : ev.recombination_nd.copy(),
+                    "residual" : ev.f.reshape(qf.node_count,3).copy()
+                })
         return SolveResult(
-            bias_V,
-            None,
-            False,
-            0,
-            np.inf,
-            np.inf,
-            "INVALID_INITIAL_STATE",
-            tuple(history),
+            bias_V = float(bias_V),
+            state = physical if ok else None,
+            converged = ok,
+            iterations = iterations,
+            residual_norm = float(rn),
+            update_norm = float(dn),
+            reason = reason,
+            iteration_history = tuple(history),
+            physics = physics
+        )
+    try:
+        qf = QFState.from_physical(state = initial_state,ref_n = ref_n,ref_p = ref_p)
+        qf = _project_contacts(qf,targets_qf)
+        physical = qf.to_physical()
+        ev = evaluate_qf(state = qf,device = device,bias_V = bias_V)
+        rn = _scaled_residual_qf(qf = qf,device = device,bias_V = bias_V,evaluation = ev,physical = physical)
+    except (ValueError,FloatingPointError,OverflowError,ArithmeticError) as exc:
+        history.append({
+            "iteration" : 0,
+            "status" : "INVALID_INITIAL_STATE",
+            "reason" : str(exc)
+        })
+        return make_result(
+            ok = False,
+            iterations = 0,
+            rn = np.inf,
+            dn = np.inf,
+            reason = "INVALID_INITIAL_STATE"
         )
     if rn <= tol_residual:
-        save_diagnostics()
-        return SolveResult(
-            bias_V,
-            old,
-            True,
-            0,
-            rn,
-            0.0,
-            "SUCCESS",
-            tuple(history),
+        return make_result(
+            ok = True,
+            iterations=  0,
+            rn = rn,
+            dn = 0.0,
+            reason = "SUCCESS",
+            qf = qf,
+            ev = ev,
+            physical = physical,
         )
     dn = np.inf
     for it in range(1, max_iter + 1):
         try:
             ustar = _poisson_step(
                 device,
-                u,
-                fn + ref_n,
-                fp + ref_p,
-                t,
+                qf.u,
+                qf.eta_n + qf.ref_n,
+                qf.eta_p + qf.ref_p,
+                targets
             )
-            fnstar = _qf_carrier_step(
+            enstar = _qf_carrier_step(
                 device,
                 ustar,
-                fn,
-                fp,
-                electron=True,
-                ref_n=ref_n,
-                ref_p=ref_p,
+                qf.eta_n,
+                qf.eta_p,#注意这里已经有了ref_n
+                electron = True,
+                ref_n = qf.ref_n,
+                ref_p = qf.ref_p
             )
-            fpstar = _qf_carrier_step(
+            epstar = _qf_carrier_step(
                 device,
                 ustar,
-                fnstar,
-                fp,
-                electron=False,
-                ref_n=ref_n,
-                ref_p=ref_p,
+                enstar,
+                qf.eta_p,
+                electron = False,
+                ref_n = qf.ref_n,
+                ref_p = qf.ref_p
             )
-        except Exception as e:
+            star = QFState(
+                u = ustar,
+                eta_n = enstar,
+                eta_p = epstar,
+                ref_n = qf.ref_n,
+                ref_p = qf.ref_p
+            )
+            star = _project_contacts(star,targets_qf)
+        except (ValueError,FloatingPointError,OverflowError,ArithmeticError) as exc:
             history.append({
-                "iteration": it,
-                "status": "SUBSTEP_FAILED",
-                "reason": str(e),
+                "iteration" : it,
+                "status" : "SUBSTEP_FAILED",
+                "reason" : str(exc)
             })
-            return SolveResult(
-                bias_V,
-                None,
-                False,
-                it,
-                rn,
-                dn,
-                "SUBSTEP_FAILED: " + str(e),
-                tuple(history),
+            return make_result(
+                ok = False,
+                iterations = it,
+                rn = rn,
+                dn = dn,
+                reason = "SUBSTEP_FAILED: " + str(exc)
             )
         alpha = 1.0
         accepted = False
         while alpha >= alpha_min:
+            trial_rn = np.inf
+            trial_dn = np.inf
+            trial_error = None
             try:
-                tu = u + alpha * (ustar - u)
-                tf = fn + alpha * (fnstar - fn)
-                tp = fp + alpha * (fpstar - fp)
-                trial = _state(
-                    tu,
-                    tf + ref_n,
-                    tp + ref_p,
-                )
-                trial_rn = _scaled_residual_qf(
-                    device,
-                    bias_V,
-                    tu,
-                    tf,
-                    tp,
-                    ref_n=ref_n,
-                    ref_p=ref_p,
-                )
-                trial_dn = _scaled_update(
-                    old,
-                    trial,
-                    n_floor,
-                )
-                good = (
-                    np.isfinite(trial_rn)
-                    and (
-                        trial_rn < rn
-                        or trial_rn <= tol_residual
-                    )
-                )
-            except Exception:
+                trial_qf = _interpolate_qf(old = qf,residual = star,alpha = alpha)
+                trial_physical = trial_qf.to_physical()
+                trial_ev = evaluate_qf(trial_qf,device,bias_V)
+                trial_rn = _scaled_residual_qf(qf = trial_qf,device = device,bias_V = bias_V,evaluation = trial_ev,physical = trial_physical)
+                trial_dn = _scaled_update(old = physical,new = trial_physical,floor = n_floor)
+                good = trial_rn < rn or trial_rn <= tol_residual
+            except (ValueError,FloatingPointError,OverflowError,ArithmeticError) as exc:
                 good = False
-                trial_rn = np.inf
-                trial_dn = np.inf
+                trial_error = str(exc)
             history.append({
-                "iteration": it,
-                "alpha": float(alpha),
-                "residual_norm": float(trial_rn),
-                "update_norm": float(trial_dn),
+                "iteration" : it,
+                "alpha" : float(alpha),
+                "residual_norm" : float(trial_rn),
+                "update_norm" : float(trial_dn),
                 "status": (
                     "ACCEPTED"
                     if good
                     else "REJECTED"
                 ),
+                "reason" : trial_error
             })
             if good:
-                old = trial
-                u = tu
-                fn = tf
-                fp = tp
+                qf = trial_qf
+                physical = trial_physical
+                ev = trial_ev
                 rn = trial_rn
                 dn = trial_dn
                 accepted = True
                 break
             alpha *= 0.5
         if not accepted:
-            return SolveResult(
-                bias_V,
-                None,
-                False,
-                it,
-                rn,
-                dn,
-                "LINE_SEARCH_FAILED",
-                tuple(history),
+            return make_result(
+                ok = False,
+                iterations = it,
+                rn = rn,
+                dn = dn,
+                reason = "LINE_SEARCH_FAILED"
             )
-        if (
-            rn <= tol_residual
-            and dn <= tol_update
-        ):
-            save_diagnostics()
-            return SolveResult(
-                bias_V,
-                old,
-                True,
-                it,
-                rn,
-                dn,
-                "SUCCESS",
-                tuple(history),
+        if rn <= tol_residual and dn <= tol_update:
+            return make_result(
+                ok = True,
+                iterations=  it,
+                rn = rn,
+                dn = dn,
+                reason = "SUCCESS",
+                qf = qf,
+                ev = ev,
+                physical = physical
             )
-    return SolveResult(
-        bias_V,
-        None,
-        False,
-        max_iter,
-        rn,
-        dn,
-        "MAX_ITER",
-        tuple(history),
+    return make_result(
+        ok = False,
+        iterations = max_iter,
+        rn = rn,
+        dn = dn,
+        reason = "MAX_ITER"
     )

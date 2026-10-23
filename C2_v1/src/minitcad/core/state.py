@@ -20,7 +20,6 @@ def _readonly(values: object, name: str) -> NDArray[np.float64]:
     if not np.all(np.isfinite(array)):
         raise ValueError(f"{name} must contain finite values only")
     return np.frombuffer(array.tobytes(), dtype=np.float64)
-#转成float64，高精度爆炸了
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +80,39 @@ class Fluxes:
         object.__setattr__(self, "jn_edges", jn)
         object.__setattr__(self, "jp_edges", jp)
 
+@dataclass(frozen=True, slots=True)
+class PhysicsDiagnostics:
+    """
+    Physical numerical diagnostics at the final accepted state.
+
+    Values are dimensionless.
+    No quasi-Fermi iteration variables are exposed.
+    """
+
+    fluxes: Fluxes
+    recombination_nd: NDArray[np.float64]
+    residual_qf_nd: NDArray[np.float64]
+
+    def __post_init__(self) -> None:
+        rate = _readonly(
+            self.recombination_nd,
+            "recombination_nd",
+        )
+        residual = _readonly(
+            self.residual_qf_nd,
+            "residual_qf_nd",
+        )
+
+        m = rate.size
+        if (
+            m < 3
+            or self.fluxes.jn_edges.size != m - 1
+            or residual.size != 3 * m
+        ):
+            raise ValueError("Invalid physics diagnostics shapes")
+
+        object.__setattr__(self, "recombination_nd", rate)
+        object.__setattr__(self, "residual_qf_nd", residual)
 
 @dataclass(frozen=True, slots=True)
 class SolveResult:
@@ -94,6 +126,7 @@ class SolveResult:
     update_norm: float
     reason: str
     iteration_history: tuple[dict, ...] = field(default_factory=tuple)
+    physics : PhysicsDiagnostics | None = None
 
     def __post_init__(self) -> None:
         if not np.isfinite(self.bias_V):
@@ -102,3 +135,96 @@ class SolveResult:
             raise ValueError("iterations must be >= 0")
         if not self.reason:
             raise ValueError("reason must be a non-empty status code")
+
+@dataclass(frozen=True, slots=True)
+class QFState:
+    """
+    Solver-internal quasi-Fermi state.
+
+    u: normalized electrostatic potential
+    eta_n: shifted electron quasi-Fermi variable
+    eta_p: shifted hole quasi-Fermi variable
+
+    n = exp(u + ref_n + eta_n)
+    p = exp(-u - ref_p - eta_p)
+    """
+
+    u: NDArray[np.float64]
+    eta_n: NDArray[np.float64]
+    eta_p: NDArray[np.float64]
+    ref_n: float = 0.0
+    ref_p: float = 0.0
+
+    def __post_init__(self) -> None:
+        u = _readonly(self.u, "u")
+        en = _readonly(self.eta_n, "eta_n")
+        ep = _readonly(self.eta_p, "eta_p")
+
+        if u.size < 3 or en.size != u.size or ep.size != u.size:
+            raise ValueError("QFState requires equal lengths M >= 3")
+
+        if not np.isfinite([self.ref_n, self.ref_p]).all():
+            raise ValueError("QF reference values must be finite")
+
+        object.__setattr__(self, "u", u)
+        object.__setattr__(self, "eta_n", en)
+        object.__setattr__(self, "eta_p", ep)
+
+    @property
+    def node_count(self) -> int:
+        return int(self.u.size)
+
+    def to_physical(self) -> State:
+        """Recover normalized carrier densities."""
+        with np.errstate(over="raise", invalid="raise"):
+            n = np.exp(self.u + self.ref_n + self.eta_n)
+            p = np.exp(-self.u - self.ref_p - self.eta_p)
+
+        # State verifies finite, strictly positive n and p.
+        return State(u=self.u, n=n, p=p)
+
+    @classmethod
+    def from_physical(
+        cls,
+        state: State,
+        *,
+        ref_n: float = 0.0,
+        ref_p: float = 0.0,
+    ) -> "QFState":
+        return cls(
+            u=state.u,
+            eta_n=np.log(state.n) - state.u - ref_n,
+            eta_p=-np.log(state.p) - state.u - ref_p,
+            ref_n=ref_n,
+            ref_p=ref_p,
+        )
+
+    def pack_qf(self) -> NDArray[np.float64]:
+        """Interleaved [u0, eta_n0, eta_p0, ...]."""
+        z = np.empty(3 * self.node_count, dtype=np.float64)
+        z[0::3] = self.u
+        z[1::3] = self.eta_n
+        z[2::3] = self.eta_p
+        return z
+
+    @classmethod
+    def unpack_qf(
+        cls,
+        z: NDArray[np.float64],
+        node_count: int,
+        *,
+        ref_n: float = 0.0,
+        ref_p: float = 0.0,
+    ) -> "QFState":
+        z = np.asarray(z, dtype=np.float64)
+
+        if z.ndim != 1 or z.size != 3 * node_count:
+            raise ValueError("Invalid QF vector shape")
+
+        return cls(
+            u=z[0::3],
+            eta_n=z[1::3],
+            eta_p=z[2::3],
+            ref_n=ref_n,
+            ref_p=ref_p,
+        )
