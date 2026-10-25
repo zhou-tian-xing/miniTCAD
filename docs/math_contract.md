@@ -27,3 +27,27 @@
 | `V_T(T)` | `src/minitcad/physics/thermal_voltage.py` |
 | 接触势与接触目标 | `src/minitcad/core/contact.py` |
 | cm↔SI 换算因子与字段后缀契约 | `src/minitcad/io/units.py` |
+| QF 状态与 QF 接触目标 | `src/minitcad/core/state.py`、`core/contact.py` |
+| QF 唯一残差 | `src/minitcad/discretization/residual.py` |
+
+## 附录：准费米能级（QF）内部表示（B 依 A 的 `b195ce5` 整理，待 A 确认）
+
+A 在 2026-10-21 把求解器内部未知量从 `(u, n, p)` 改为 `(u, eta_n, eta_p)`。
+公开的物理状态仍是 `State(u, n, p)`；QF 只存在于求解器内部。
+
+$$
+n_i=\exp(u_i+\text{ref}_n+\eta_{n,i}),\qquad
+p_i=\exp(-u_i-\text{ref}_p-\eta_{p,i})
+$$
+
+- `ref_n`、`ref_p` 是每次求解固定的参考平移量（A 的 `solve_gummel` 以右接触锚定：
+  `ref_n=ln n_R-u_R`、`ref_p=-ln p_R-u_R`）；B 的 `QFState` 默认为 0。
+- 接触局部平衡时 `eta_n=eta_p=-v`（左端，`v=V_app/V_T`）、`0`（右端）。
+- SG 边通量用 `expm1(diff(eta))` 避免 `n p-1` 的灾难性抵消：
+  `j_{n,i+1/2}=-(m_n/h_i)n_{i+1}B(du_i)\operatorname{expm1}(-\Delta\eta_{n,i})`
+  （`Δη>0` 分支；`Δη≤0` 分支对称），空穴同理。
+- 中能级 SRH 的分子 `np-1` 改写为 `expm1((ref_n-ref_p)+(eta_n-eta_p))`。
+- QF 版残差 `evaluate_qf` 的 6 行 Dirichlet 直接作用在 `eta_n/eta_p` 上；
+  Poisson 行仍用 `n,p` 重建值。
+- **注意**：`C2_v1` 中的旧 `residual(State,...)` 仅为历史/回归接口，W4 起
+  求解器必须调用 `evaluate_qf`/`residual_qf`（唯一 `F(X)` 原则）。

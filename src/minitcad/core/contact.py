@@ -2,6 +2,9 @@
 
 约定：左边是 P，右边是 N；V_app = V_left - V_right，正的 V_app 是正向；右端接地。
 接触处局部平衡，所以 n = e^a、p = e^-a，其中 a = asinh(C/2)，C 是净掺杂（已除以 n_i）。
+
+``contact_targets`` 返回物理六元组；A 的 QF 残差使用 ``contact_targets_qf``，
+它把同一组边界换算成 ``(u, eta_n, eta_p)`` 的 Dirichlet 目标。
 """
 
 from __future__ import annotations
@@ -65,3 +68,29 @@ def contact_targets(device: object, bias_V: float) -> tuple[float, float, float,
     u_l = contact_potential_nd(device.net_doping_left_nd) + v
     u_r = contact_potential_nd(device.net_doping_right_nd)
     return u_l, n_l, p_l, u_r, n_r, p_r
+
+
+def contact_targets_qf(
+    device: object,
+    bias_V: float,
+    *,
+    ref_n: float = 0.0,
+    ref_p: float = 0.0,
+) -> tuple[float, float, float, float, float, float]:
+    """QF 残差用的接触边界值 ``(u_L, eta_nL, eta_pL, u_R, eta_nR, eta_pR)``。
+
+    由物理接触六元组按 ``n = exp(u + ref_n + eta_n)``、
+    ``p = exp(-u - ref_p - eta_p)`` 反解，因此本函数给出的是 QF 版 Dirichlet 目标。
+    边界局部平衡时 ``eta_n = eta_p = -v``（左端）和 ``0``（右端），``v = V_app/V_T``。
+    """
+    if not math.isfinite(ref_n) or not math.isfinite(ref_p):
+        raise ValueError("QF reference values must be finite")
+    u_l, n_l, p_l, u_r, n_r, p_r = contact_targets(device, bias_V)
+    return (
+        u_l,
+        math.log(n_l) - u_l - ref_n,
+        -math.log(p_l) - u_l - ref_p,
+        u_r,
+        math.log(n_r) - u_r - ref_n,
+        -math.log(p_r) - u_r - ref_p,
+    )

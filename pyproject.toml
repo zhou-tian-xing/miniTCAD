@@ -15,6 +15,9 @@ dependencies = [
     "PyYAML>=6.0",
 ]
 
+[project.scripts]
+minitcad = "minitcad.cli:main"
+
 [project.optional-dependencies]
 # GUI 是可选依赖：核心模块不得无条件导入 Qt（第 14.9 节）。
 dev = ["pytest>=7.0", "matplotlib>=3.7"]
