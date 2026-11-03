@@ -125,3 +125,49 @@ def test_qf_and_physical_paths_agree_between_nodes():
     assert flux.jp_edges[0] == pytest.approx(jp_phys, rel=1e-12, abs=1e-15)
     assert abs(jn_phys) > 1e-3
     assert abs(jp_phys) > 1e-3
+
+
+def test_qf_sg_resolves_a_splitting_that_the_physical_path_rounds_to_zero():
+    """QF 边通量的精度证据：`u=350` 时 1e-16 的 `Δη` 仍可分辨，物理路径已为 0。
+
+    `n = exp(u + η)`：`u = 350` 处 `n` 的相对分辨率约 `2.2e-16`，绝对分辨率约
+    `1e-13`，因此 `Δη = 1e-16` 在 `n_{i+1} - n_i` 里被完全舍入掉。QF 路径用
+    `expm1(Δη)` 直接对上 `Δη`，给出正确的一阶电流。这是 A 把内部变量改成
+    `(u, η_n, η_p)` 的**可复现**精度收益，也是 B 侧独立核对 A 重构的依据。
+    """
+    u = np.full(3, 350.0)
+    eta_n = np.array([0.0, 1.0e-16, 2.0e-16])
+    h = np.array([0.02, 0.02])
+    flux = edge_flux_qf(u, eta_n, np.zeros(3), h, 1.0, 1.0)
+
+    n = np.exp(u + eta_n)
+    current_physical = (n[1] - n[0]) / h[0]
+    assert current_physical == 0.0  # 物理路径把 1e-16 的 QF 分裂舍入掉了
+
+    expected = (1.0 / h[0]) * n[0] * np.expm1(1.0e-16)  # du=0 => B(0)=1
+    assert flux.jn_edges[0] != 0.0
+    assert flux.jn_edges[0] == pytest.approx(expected, rel=1e-12)
+
+    # 空穴方向对称：p = exp(-u - η_p)，同一个 Δη 也应被分辨。
+    flux_p = edge_flux_qf(u, np.zeros(3), eta_n, h, 1.0, 1.0)
+    p = np.exp(-u - eta_n)
+    assert (p[1] - p[0]) / h[0] == 0.0
+    assert flux_p.jp_edges[0] != 0.0
+
+
+def test_qf_sg_is_exact_up_to_u_700_and_fails_loudly_beyond():
+    """支持的指数范围：`|u| <= 700`（约 18 V）内常数 QF 严格零电流；
+    再往上 `exp` 溢出，`Fluxes` 的有限性检查必须让整条链路显式失败，
+    而不是把 `inf`/`nan` 当电流交给求解器（第 4.3、7.1 节的非法状态约定）。"""
+    h = np.array([0.01, 0.01])
+    eta_n = np.full(3, 0.4)
+    eta_p = np.full(3, -0.2)
+
+    inside = edge_flux_qf(np.array([680.0, 690.0, 700.0]), eta_n, eta_p, h, 1.0, 1.0)
+    assert np.all(inside.jn_edges == 0.0) and np.all(inside.jp_edges == 0.0)
+
+    # numpy 先报 overflow 警告，再由 Fluxes 的有限性检查抛出 ValueError：
+    # 生产链路不会把 inf/nan 当电流交给求解器，这里只屏蔽 numpy 的告警噪音。
+    with np.errstate(over="ignore", invalid="ignore"):
+        with pytest.raises(ValueError):
+            edge_flux_qf(np.array([740.0, 750.0, 760.0]), eta_n, eta_p, h, 1.0, 1.0)

@@ -97,8 +97,19 @@ QF 生产入口是 `evaluate_qf(QFState, device, bias_V)` / `residual_qf(...)`�
 | QF 边界行 | 6 行 Dirichlet 直接作用在 `eta_n/eta_p` 与 `u` 上 | 内部行仍由 `n,p` 重建值构成 |
 
 QF 精度改写（A 的 `b195ce5`）：SG 用 `expm1(Δη)`、SRH 分子用 `expm1((ref_n-ref_p)+(η_n-η_p))`，
-避开 `np-1` 在 `np≈1` 处的灾难性抵消（证据：`test_qf_srh_avoids_cancellation_near_equilibrium`，
-`u=40`、`η_n=1e-16` 时物理路径的 `np-1` 已为 0）。
+避开 `np-1` 在 `np≈1` 处的灾难性抵消。可复现证据（B 侧独立核对）：
+
+- SRH：`u=40`、`η_n=1e-16` 时物理路径的 `np-1` 已为 0，QF 仍给出正速率
+  （`test_qf_srh_avoids_cancellation_near_equilibrium`）。
+- SG：`u=350`、`Δη=1e-16` 时物理路径 `(n_{i+1}-n_i)/h = 0.0`，QF 给出
+  `5.0e137`，与 `n·expm1(Δη)/h` 相对误差 `<=1e-12`
+  （`test_qf_sg_resolves_a_splitting_that_the_physical_path_rounds_to_zero`）。
+
+**支持范围**：`|u| <= 700`（约 18 V）内 QF 边通量精确（常数 QF 严格零电流）；
+超出后 `exp` 溢出，`Fluxes`/`State` 的有限性检查让整条链路显式抛出 `ValueError`，
+不会把 `inf`/`nan` 当电流交给求解器
+（`test_qf_sg_is_exact_up_to_u_700_and_fails_loudly_beyond`）。SRH 在同一区间内返回有限值；
+更极端的 `u` 属于非物理工作点，不作为支持范围声明。
 
 ## 6. 冻结的容差与验收门槛
 
@@ -135,7 +146,7 @@ QF 精度改写（A 的 `b195ce5`）：SG 用 `expm1(Δη)`、SRH 分子用 `exp
 | 日期 | 变更 | 影响 | 提交 |
 |---|---|---|---|
 | 2026-10-25 | 并入 A 的 QF 残差/SG/SRH/平衡初值，新增 `QFState`/`contact_targets_qf`/`PhysicsDiagnostics` | 内部表示变化，公开 API 不变 | `98ff013` |
-| 2026-11-03 | 收紧 W2 校验：`segmented` 结区必须落结点、结点数必须整数、`w` 一致性检查、右端必须 0 V、接触浓度越界拒绝；新增 `docs/numerical_conventions.md`、`docs/convergence_template.md` | 仅拒绝此前被静默接受的非法配置；合法配置结果不变（235 → 251 passed，新增 16 项测试） | 本次提交 |
+| 2026-11-03 | 收紧 W2 校验：`segmented` 结区必须落结点、结点数必须整数、`w` 一致性检查、右端必须 0 V、接触浓度越界拒绝；新增 `docs/numerical_conventions.md`、`docs/convergence_template.md` | 仅拒绝此前被静默接受的非法配置；合法配置结果不变（235 → 253 passed，新增 18 项测试） | 本次提交 |
 
 ## 9. 证据索引
 

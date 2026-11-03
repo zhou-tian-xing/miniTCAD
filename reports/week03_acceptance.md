@@ -12,12 +12,12 @@
 ```bash
 cd <repo-root>
 python -m pytest -q
-# 251 passed in 0.93s（0 skipped；2026-11-03 加固后重跑）
+# 253 passed in 0.85s（0 skipped；2026-11-03 加固后重跑）
 
 python -m pytest tests/test_oracle_bernoulli.py tests/test_oracle_srh.py \
     tests/test_oracle_poisson.py tests/test_oracle_sg.py \
     tests/test_oracle_qf_residual.py -q
-# 105 passed
+# 107 passed
 ```
 
 A 的 `C2_v1` 独立树（仅作对照，不被根包导入）：
@@ -87,7 +87,8 @@ cd C2_v1 && python -m pytest -q
 | T02 SRH 异寿命 | `19/47`，误差 ≤ 1e-12 | 通过 |
 | T03/T04 接触/极性 | `np=1`、`p-n+C=0`、`u_L=a(C_L)+v` ≤ 1e-10 | 通过 |
 | T05 非均匀 Poisson | 二次制造解内部残差 ≤ 1e-11 | 通过 |
-| T06 平衡零电流 | `j_n=j_p=0`（物理与 QF 两口径） | 通过（QF 严格 0） |
+| T06 平衡零电流 | `j_n=j_p=0`（物理与 QF 两口径） | 通过（QF 严格 0；`|u|<=700` 内成立，再往上链路显式失败） |
+| QF 精度收益（SG） | `u=350`、`Δη=1e-16`：物理路径 `(n_{i+1}-n_i)/h = 0.0`，QF 给出 `5.0e137`，与 `n·expm1(Δη)/h` 相对误差 `<=1e-12` | 通过（2026-11-03 新增） |
 | T07 纯扩散 | `j_n=m_n(n_R-n_L)/h`、`j_p=m_p(p_L-p_R)/h` | 通过 |
 | I-01（QF 扩展） | 只读、3M 交错、pack/unpack 往返 | 通过 |
 
