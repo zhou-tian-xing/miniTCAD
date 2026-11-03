@@ -69,6 +69,9 @@ class Mesh1D:
             raise ValueError("x_nodes_cm must be strictly increasing")
         if not np.allclose(h_cm, np.diff(x_cm), rtol=0.0, atol=0.0):
             raise ValueError("h_edges_cm must equal diff(x_nodes_cm)")
+        # 控制体宽度必须是相邻两段间距的一半之和（第 5.1 节），错取相邻边会静默改物理。
+        if not np.allclose(w_cm, 0.5 * (h_cm[:-1] + h_cm[1:]), rtol=1e-12, atol=0.0):
+            raise ValueError("w_interior_cm must equal adjacent edge-halfwidth sum")
 
         # cm 与 nd 两套坐标必须只差同一个比例 L0
         scale = h_nd[0] / h_cm[0]
@@ -126,7 +129,9 @@ def uniform(length_cm: float, nodes: int, l0_cm: float) -> Mesh1D:
         raise ValueError("length_cm must be finite and > 0")
     if not np.isfinite(l0_cm) or l0_cm <= 0.0:
         raise ValueError("l0_cm must be finite and > 0")
-    if int(nodes) < MIN_NODES:
+    if isinstance(nodes, bool) or not isinstance(nodes, (int, np.integer)):
+        raise ValueError(f"nodes must be an integer, got {nodes!r}")
+    if nodes < MIN_NODES:
         raise ValueError(f"nodes must be >= {MIN_NODES}, got {nodes}")
     return _build(np.linspace(0.0, length_cm, int(nodes)), l0_cm)
 
@@ -148,7 +153,10 @@ def segmented(
         raise ValueError("l0_cm must be finite and > 0")
 
     breaks = np.array(breakpoints_cm, dtype=np.float64)
-    counts = np.array(per_segment_nodes, dtype=np.int64)
+    raw_counts = np.asarray(per_segment_nodes)
+    if raw_counts.ndim != 1 or not np.issubdtype(raw_counts.dtype, np.integer):
+        raise ValueError("per_segment_nodes must contain integer node counts")
+    counts = raw_counts.astype(np.int64)
     if breaks.ndim != 1 or breaks.size < 2:
         raise ValueError("breakpoints_cm must list at least two coordinates")
     if counts.shape != (breaks.size - 1,):

@@ -160,3 +160,38 @@ def test_equilibrium_state_has_zero_qf_current():
     assert np.max(np.abs(evaluation.fluxes.jn_edges)) <= 1e-9
     assert np.max(np.abs(evaluation.fluxes.jp_edges)) <= 1e-9
     assert np.max(np.abs(evaluation.recombination_nd)) <= 1e-9
+
+
+def test_internal_rows_are_invariant_to_the_qf_reference_shift():
+    """``ref_n/ref_p`` 只是平移锚点，物理残差必须与它无关（W3 §5 的冻结口径）。
+
+    A 的 ``solve_gummel`` 以右接触锚定 ``ref_*``，B 的 ``QFState`` 默认 0；两者必须
+    给出同一个 ``F(X)``。这里对同一物理状态换三组参考量，内部行必须完全一致。
+    """
+    device = _device()
+    bias = 0.1
+    physical = _nonequilibrium_qf(device, bias).to_physical()
+    m = device.mesh.node_count
+    old = residual(physical, device, bias).reshape((m, 3))
+    for ref_n, ref_p in ((0.0, 0.0), (2.3, -1.7), (-5.0, 4.0)):
+        qf = QFState.from_physical(physical, ref_n=ref_n, ref_p=ref_p)
+        new = evaluate_qf(qf, device, bias).f.reshape((m, 3))
+        np.testing.assert_allclose(
+            new[1:-1, 0], old[1:-1, 0], rtol=1e-12, atol=1e-13,
+            err_msg=f"Poisson rows moved with ref_n={ref_n}, ref_p={ref_p}",
+        )
+        np.testing.assert_allclose(
+            new[1:-1, 1:], old[1:-1, 1:], rtol=1e-11, atol=1e-13,
+            err_msg=f"continuity rows moved with ref_n={ref_n}, ref_p={ref_p}",
+        )
+        # 接触行用同一组参考量的目标值必须严格为 0。
+        targets = contact_targets_qf(device, bias, ref_n=ref_n, ref_p=ref_p)
+        u = np.array(qf.u, copy=True)
+        eta_n = np.array(qf.eta_n, copy=True)
+        eta_p = np.array(qf.eta_p, copy=True)
+        u[0], u[-1] = targets[0], targets[3]
+        eta_n[0], eta_n[-1] = targets[1], targets[4]
+        eta_p[0], eta_p[-1] = targets[2], targets[5]
+        at_targets = QFState(u=u, eta_n=eta_n, eta_p=eta_p, ref_n=ref_n, ref_p=ref_p)
+        boundary = residual_qf(at_targets, device, bias).reshape((m, 3))
+        assert np.all(boundary[0, :] == 0.0) and np.all(boundary[-1, :] == 0.0)

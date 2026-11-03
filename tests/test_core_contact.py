@@ -134,3 +134,19 @@ def test_device_contact_targets_match_stub():
         device.net_doping_left_nd, device.net_doping_right_nd, device.thermal_voltage_v
     )
     assert from_device == pytest.approx(contact_targets(stub, 0.15))
+
+
+def test_extreme_contact_doping_is_rejected_or_stays_representable():
+    """接触浓度在 float64 边界上的行为（第 4.2 节的非法状态约定）。
+
+    ``n = e^a`` 且 ``a = asinh(C/2)``，因此 ``n ≈ C``、``p ≈ 1/C``：有限 ``C`` 不会
+    让 ``n`` 溢出，但 ``p`` 会趋近次正规下限。实测边界必须写进测试，避免把
+    “永不发生”的溢出分支当成已验证的保护。
+    """
+    n, p = contact_concentrations_nd(1.5e308)
+    assert math.isfinite(n) and math.isfinite(p)
+    assert n > 0.0 and p > 0.0
+    assert n * p == pytest.approx(1.0, rel=1e-12)
+    for bad in (math.inf, -math.inf, math.nan):
+        with pytest.raises(ValueError):
+            contact_concentrations_nd(bad)

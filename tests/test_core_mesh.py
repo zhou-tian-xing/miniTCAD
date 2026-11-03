@@ -84,3 +84,36 @@ def test_inconsistent_nd_mesh_is_rejected():
             h_edges_nd=mesh.h_edges_nd,
             w_interior_nd=mesh.w_interior_nd,
         )
+
+
+def test_non_integer_node_count_is_rejected():
+    # 结点数必须是整数：浮点数或布尔值不能被静默截断（第 5.4 节）。
+    with pytest.raises(ValueError):
+        uniform(1.0e-3, 201.5, L0_CM)
+    with pytest.raises(ValueError):
+        uniform(1.0e-3, True, L0_CM)
+    with pytest.raises(ValueError):
+        segmented(1.5, (0.0, 0.75, 1.5), (2.5, 3), L0_CM)
+
+
+def test_inconsistent_control_volume_width_is_rejected():
+    # w_i 必须等于相邻两段间距的一半之和；取错下标（例如错用 h_{i+1}）要显式失败。
+    mesh = segmented(1.5, (0.0, 0.5, 1.5), (2, 5), L0_CM)
+    assert mesh.w_interior_cm[0] == pytest.approx(0.5 * (0.5 + 0.25))  # (h_0 + h_1)/2
+    wrong = np.array(mesh.w_interior_cm, copy=True)
+    wrong[0] = 0.5 * (mesh.h_edges_cm[1] + mesh.h_edges_cm[2])  # 错取到下一对边
+    assert wrong[0] != pytest.approx(mesh.w_interior_cm[0])
+    with pytest.raises(ValueError):
+        Mesh1D(
+            x_nodes_cm=mesh.x_nodes_cm,
+            h_edges_cm=mesh.h_edges_cm,
+            w_interior_cm=wrong,
+            x_nodes_nd=mesh.x_nodes_nd,
+            h_edges_nd=mesh.h_edges_nd,
+            w_interior_nd=mesh.w_interior_nd,
+        )
+
+
+def test_segmented_requires_covering_breakpoints_with_integer_counts():
+    with pytest.raises(ValueError):
+        segmented(1.5, (0.0, 0.5, 1.5), (3,), L0_CM)

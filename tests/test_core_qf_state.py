@@ -172,3 +172,27 @@ def test_solve_result_physics_requires_converged_state():
     with pytest.raises(ValueError):
         SolveResult(0.0, _state(5), True, 3, 1e-9, 1e-7, "SUCCESS",
                     physics=diagnostics)
+
+
+@pytest.mark.parametrize(("ref_n", "ref_p"), [(1.7, -0.9), (-3.0, 2.5), (0.0, 0.0)])
+def test_contact_targets_qf_honours_a_nonzero_reference(ref_n, ref_p):
+    """``ref_n/ref_p`` 非零时，QF 接触目标仍必须还原同一组物理接触浓度。
+
+    这是 W3 §5 的开放项：A 的 ``solve_gummel`` 以右接触锚定 ``ref_*``，
+    因此 B 的契约测试不能只覆盖默认 ``ref_* = 0``。
+    """
+    device = _DeviceStub(c_left_nd=-1.0e6, c_right_nd=2.0e5, vt_v=0.025852)
+    bias = 0.12
+    u_l, eta_nl, eta_pl, u_r, eta_nr, eta_pr = contact_targets_qf(
+        device, bias, ref_n=ref_n, ref_p=ref_p
+    )
+    physical = contact_targets(device, bias)
+    reconstructed = [
+        math.exp(u_l + ref_n + eta_nl),
+        math.exp(-u_l - ref_p - eta_pl),
+        math.exp(u_r + ref_n + eta_nr),
+        math.exp(-u_r - ref_p - eta_pr),
+    ]
+    assert reconstructed == pytest.approx(
+        [physical[1], physical[2], physical[4], physical[5]], rel=1e-14
+    )

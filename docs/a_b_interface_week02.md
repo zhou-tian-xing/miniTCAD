@@ -2,6 +2,9 @@
 
 > **状态**：B 已按 A 的 `b195ce5`（2026-10-23）准费米能级（QF）重构复核并同步；
 > A 待签。冻结后 W3 起不得在无通知的情况下改字段名或 QF 变量定义。
+> **2026-11-03 复核**：B 重跑双方测试并收紧三处 W2 校验（分段网格结区落结点、整数结点数、
+> 右端 0 V），新增 `ref_n/ref_p` 平移不变性断言；单位/符号/容差契约另见
+> `docs/numerical_conventions.md`（§14.7 要求与本文件配套）。
 > **依据**：`目的与规划.md` §14.7、§10.3；A 的 `C2_v1/src/minitcad/discretization/residual.py`
 > 头注释与 `C2_v1/tests/test_qf_state.py`、`test_qf_stability.py`。
 > **Owner**：B 维护本表，A 校核。
@@ -10,16 +13,19 @@
 
 | 项 | 值 |
 |---|---|
-| 接口版本 | `w2-w3/qf-v1`（在 2026-10-18 冻结版上增加 QF 内部表示） |
-| 批准人 A / B | 待签 / B（2026-10-25 复核 `b195ce5`） |
-| 变更日期 | 2026-10-25 |
-| 对应 git commit | A：`b195ce5`；B：本工作区（根 `src/minitcad` 同步提交） |
+| 接口版本 | `w2-w3/qf-v1`（在 2026-10-18 冻结版上增加 QF 内部表示；2026-11-03 加固不改字段名） |
+| 批准人 A / B | 待签 / B（2026-10-25 复核 `b195ce5`；2026-11-03 加固复核） |
+| 变更日期 | 2026-10-25（初版）、2026-11-03（加固） |
+| 对应 git commit | A：`b195ce5`；B：`98ff013` 之后的加固提交（根 `src/minitcad`） |
+| 配套契约文件 | `docs/numerical_conventions.md`（单位/符号/容差/非法状态）、`docs/convergence_template.md`（§12.3） |
 
 ## 2. 会审项（QF 版）
 
 | 字段 | 正式生产版本（B 定义、A 校核） | 教学 SI 验证版本（A） | 核对方式 | 结论 |
 |---|---|---|---|---|
-| 网格 | `x_nodes_cm[M]`、`x_nodes_nd[M]`、`h_edges_nd[M-1]`、`w_interior_nd[M-2]` | `x_m[M]`，`h=diff(x)`（仅 SI 教学/适配） | `tests/test_core_mesh.py` | 已核对 |
+| 网格 | `x_nodes_cm[M]`、`x_nodes_nd[M]`、`h_edges_nd[M-1]`、`w_interior_nd[M-2]`；`w_i=(h_{i-1}+h_i)/2` 在构造时校验 | `x_m[M]`，`h=diff(x)`（仅 SI 教学/适配） | `tests/test_core_mesh.py` | 已核对 |
+| **结区与网格** | `segmented` 必须把每个结区坐标列为断点且落在结点上（相对容差 `1e-12`）；`uniform` 允许结区落在控制体内部，由 `cbar_nd` 吸收 | 同 B | `tests/test_core_device.py`、`test_io_config.py` | 已核对（2026-11-03 新增） |
+| **右端参考** | `right_voltage_V` 必须为 `0.0`（`V_app = V_left - V_right`，偏压只加在左端） | 同 B | `tests/test_core_device.py`、`test_io_config.py` | 已核对（2026-11-03 新增） |
 | 公开势 | `State.u[M]` 无量纲 | `phi_V[M]`、`phi_L/R_V` | `phi = V_T * u` | 已核对 |
 | **内部 QF 状态** | `QFState(u, eta_n, eta_p, ref_n, ref_p)`，`n=exp(u+ref_n+eta_n)`、`p=exp(-u-ref_p-eta_p)`，数组只读、M≥3、3M 交错 | 不进入教学 SI 验证器 | `tests/test_core_qf_state.py`：往返/只读/3M 布局 | 已核对（新增） |
 | 载流子与掺杂 | 物理输入 `*_cm3`，内核 `n_nd,p_nd,Cbar_nd` | `n,p,N_D,N_A` 用 `m^-3` | A 核对符号，B 核对 cm↔SI 适配 | 已核对 |
@@ -66,12 +72,19 @@
    并保留 T07 纯扩散与物理 SG 的交叉核对；新增 QF 残差与旧 `residual` 内部行的一致性测试。
 5. **精度证据**：`tests/test_oracle_qf_residual.py::test_qf_srh_avoids_cancellation_near_equilibrium`
    在 `u=40`、`eta_n=1e-16` 时物理 `np-1` 已舍入为 0，而 QF 的 `expm1` 仍给出正速率。
+6. **参考量契约可执行**：`test_internal_rows_are_invariant_to_the_qf_reference_shift` 对同一物理状态
+   取 `(0,0)`、`(2.3,-1.7)`、`(-5,4)` 三组 `ref_n/ref_p`，内部行必须完全一致、接触行严格为 0；
+   `test_core_qf_state.py::test_contact_targets_qf_honours_a_nonzero_reference` 固定
+   “`contact_targets_qf` 必须还原同一组物理接触浓度”。这样 §5 第 1 项不再依赖口头约定。
+   注：理想欧姆接触下 A 的右端锚定实际给出 `ref_n=ref_p=0`（因 `n_R=e^{a(C_R)}`、`u_R=a(C_R)`），
+   所以 B 的默认值 0 与 A 的锚定**在这套边界条件下等价**。
 
 ## 5. 待 A 确认的开放项
 
-1. **`ref_n/ref_p` 的冻结定义**：A 的 `solve_gummel` 以右接触为参考
+1. **`ref_n/ref_p` 的冻结定义**（B 侧已加断言，待 A 签字）：A 的 `solve_gummel` 以右接触为参考
    （`ref_n=log(n_R)-u_R`、`ref_p=-log(p_R)-u_R`）。B 的 `QFState` 默认 0，
-   `contact_targets_qf` 显式接收 `ref_*`；两者必须写死在 W3-A7 的签名冻结中。
+   `contact_targets_qf` 显式接收 `ref_*`。2026-11-03 新增的平移不变性测试证明两者在残差上等价，
+   因此 W4 合并 `solvers/gummel.py` 时可以自由选择锚点，但**签名里必须保留 `ref_n/ref_p`**。
 2. **`C2_v1` 遗留重复定义**：`C2_v1/.../solvers/gummel.py` 同时存在旧
    `solve_gummel`（约 419 行）与 QF 版（约 567 行），后者覆盖前者；
    合并到根包 W4 时必须只保留 QF 版。本次未把 `solvers/` 并入根包（属 W4）。
@@ -93,4 +106,4 @@
 
 A：**待签**（请确认 §5 的 1–6 项，尤其是 `ref_n/ref_p` 与 `C2_v1` 遗留定义）
 
-B：**已签**（2026-10-25，复核 commit `b195ce5`；根包 `pytest -q` 全绿）
+B：**已签**（2026-10-25 复核 commit `b195ce5`；2026-11-03 加固复核，根包 `pytest -q` = 251 passed）

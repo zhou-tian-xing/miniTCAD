@@ -116,3 +116,31 @@ def test_unknown_material_name_is_rejected():
     data["material"] = {"name": "germanium"}
     with pytest.raises(ValueError):
         parse_config_dict(data)
+
+
+def test_nonzero_right_voltage_is_rejected():
+    # 右端是 0 V 参考；偏压只由左端给出（第 4.2 节），配置层必须先拒绝。
+    data = _minimal()
+    data["contacts"] = {"right_voltage_V": 0.1}
+    with pytest.raises(UnitError):
+        parse_config_dict(data)
+
+
+def test_non_integer_node_count_in_yaml_is_rejected():
+    # 201.7 不能被静默截断成 201（第 5.4 节）。
+    data = _minimal()
+    data["mesh"] = {"type": "uniform", "nodes": 20.5}
+    with pytest.raises(UnitError):
+        parse_config_dict(data)
+
+
+def test_segmented_yaml_without_the_junction_is_rejected():
+    data = _minimal()
+    data["mesh"] = {
+        "type": "segmented",
+        "breakpoints": [0.0, 5.0e-4, 1.0e-3],
+        "per_segment_nodes": [6, 11],
+    }
+    with pytest.raises(ValueError) as excinfo:
+        build_device(parse_config_dict(data))
+    assert "junction" in str(excinfo.value)

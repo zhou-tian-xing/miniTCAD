@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from minitcad.core.device import (
@@ -93,3 +94,51 @@ def test_segmented_mesh_spec_builds():
         )
     )
     assert device.mesh.node_count == 41  # 11 + 31 - 1 共享结点
+
+
+def test_segmented_mesh_must_include_junction_breakpoint():
+    # 声明 segmented 就必须把结区坐标写进断点，否则“结区加密”没有兑现（第 5.1、5.3 节）。
+    with pytest.raises(ValueError) as excinfo:
+        build_device(
+            _config(
+                mesh=MeshSpec(
+                    kind="segmented",
+                    breakpoints_cm=(0.0, 5.0e-4, LENGTH_CM),
+                    per_segment_nodes=(6, 11),
+                )
+            )
+        )
+    assert "junction" in str(excinfo.value)
+
+
+def test_segmented_mesh_puts_the_junction_on_a_node():
+    device = build_device(
+        _config(
+            mesh=MeshSpec(
+                kind="segmented",
+                breakpoints_cm=(0.0, JUNCTION_CM, LENGTH_CM),
+                per_segment_nodes=(11, 31),
+            )
+        )
+    )
+    assert np.isclose(device.mesh.x_nodes_cm, JUNCTION_CM, rtol=1e-12, atol=0.0).any()
+
+
+def test_uniform_mesh_keeps_junction_inside_a_control_volume():
+    # 均匀网格的结区可以落在控制体内部，由 cbar_nd 的控制体积分吸收（第 5.1 节），
+    # 因此这项约束只对 segmented 生效。
+    device = build_device(_config(mesh=MeshSpec(kind="uniform", nodes=7)))
+    assert not np.isclose(device.mesh.x_nodes_cm, JUNCTION_CM, rtol=1e-12, atol=0.0).any()
+    assert np.all(np.isfinite(device.cbar_nd))
+
+
+def test_right_terminal_must_be_grounded():
+    with pytest.raises(ValueError):
+        _config(right_voltage_V=0.1)
+
+
+def test_mesh_spec_requires_integer_node_counts():
+    with pytest.raises(ValueError):
+        MeshSpec(kind="uniform", nodes=21.5)
+    with pytest.raises(ValueError):
+        MeshSpec(kind="segmented", breakpoints_cm=(0.0, LENGTH_CM), per_segment_nodes=(2.5,))

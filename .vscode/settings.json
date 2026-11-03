@@ -1,0 +1,8 @@
+{
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.unittestEnabled": false,
+  "python.analysis.extraPaths": ["${workspaceFolder}/src"],
+  "files.encoding": "utf8",
+  "files.eol": "\n"
+}

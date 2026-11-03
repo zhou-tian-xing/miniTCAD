@@ -7,7 +7,7 @@ DeviceConfig 存 YAML/API 里的 cm 字段；NormalizedDevice 是给求解器用
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import isfinite
+from math import isclose, isfinite
 
 import numpy as np
 from numpy.typing import NDArray
@@ -37,13 +37,23 @@ class MeshSpec:
         if self.kind not in ("uniform", "segmented"):
             raise ValueError(f"unknown mesh kind: {self.kind!r}")
         if self.kind == "uniform":
-            if self.nodes is None or int(self.nodes) < mesh_module.MIN_NODES:
-                raise ValueError(f"uniform mesh needs nodes >= {mesh_module.MIN_NODES}")
+            if (
+                self.nodes is None
+                or isinstance(self.nodes, bool)
+                or not isinstance(self.nodes, (int, np.integer))
+                or self.nodes < mesh_module.MIN_NODES
+            ):
+                raise ValueError(f"uniform mesh needs integer nodes >= {mesh_module.MIN_NODES}")
         else:
             if len(self.breakpoints_cm) < 2:
                 raise ValueError("segmented mesh needs at least two breakpoints")
             if len(self.per_segment_nodes) != len(self.breakpoints_cm) - 1:
                 raise ValueError("per_segment_nodes must have one entry per segment")
+            if any(
+                isinstance(value, bool) or not isinstance(value, (int, np.integer))
+                for value in self.per_segment_nodes
+            ):
+                raise ValueError("per_segment_nodes must contain integer node counts")
 
     def build(self, length_cm: float, l0_cm: float) -> Mesh1D:
         """按声明生成网格。"""
@@ -99,6 +109,9 @@ class DeviceConfig:
             raise ValueError("area_cm2 must be finite and > 0")
         if not isfinite(self.temperature_k) or self.temperature_k <= 0.0:
             raise ValueError("temperature_k must be finite and > 0")
+        # 右端是 0 V 参考（第 4.2 节）；偏压只由左端给出，不允许两端同时加偏压。
+        if not isfinite(self.right_voltage_V) or self.right_voltage_V != 0.0:
+            raise ValueError("right terminal must be grounded at exactly 0 V")
         if self.device_type not in (DEVICE_PN, DEVICE_GENERIC_1D):
             raise ValueError(f"unknown device type: {self.device_type!r}")
         if self.device_type == DEVICE_PN:
@@ -138,6 +151,10 @@ class NormalizedDevice:
             array = np.ascontiguousarray(getattr(self, name), dtype=np.float64).copy()
             array.setflags(write=False)
             object.__setattr__(self, name, array)
+        for name in ("mu_n_nd", "mu_p_nd", "tau_n_nd", "tau_p_nd"):
+            value = getattr(self, name)
+            if not isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and > 0")
 
     @property
     def thermal_voltage_v(self) -> float:
@@ -168,12 +185,39 @@ class NormalizedDevice:
         return contact_targets(self, bias_V)
 
 
+def _require_junctions_on_nodes(config: DeviceConfig, mesh: Mesh1D, profile: DopingProfile) -> None:
+    """分段网格必须把每个结区坐标都放在断点（也就是结点）上（第 5.1、5.3 节）。
+
+    均匀网格的结点由结点数决定，结区可以落在控制体内部，由 ``cbar_nd`` 的控制体
+    积分吸收，因此这里只约束 ``segmented``；但一旦声明``segmented``，结区就必须是
+    结点，否则“在结区加密”的意图没有兑现，求解器仍会在整段上取平均。
+    """
+    if config.mesh.kind != "segmented":
+        return
+    breaks = np.asarray(config.mesh.breakpoints_cm, dtype=np.float64)
+    nodes = mesh.x_nodes_cm
+    for region in profile.regions[:-1]:
+        junction_cm = region.end_cm
+        if not np.any(np.isclose(breaks, junction_cm, rtol=1e-12, atol=0.0)):
+            raise ValueError(
+                f"segmented mesh must list junction {junction_cm:.12g} cm as a breakpoint; "
+                f"breakpoints are {list(config.mesh.breakpoints_cm)}"
+            )
+        nearest_cm = float(nodes[int(np.argmin(np.abs(nodes - junction_cm)))])
+        if not isclose(nearest_cm, junction_cm, rel_tol=1e-12, abs_tol=0.0):
+            raise ValueError(
+                f"junction {junction_cm:.12g} cm must fall on a mesh node; "
+                f"nearest node is {nearest_cm:.12g} cm"
+            )
+
+
 def build_device(config: DeviceConfig) -> NormalizedDevice:
     """由 DeviceConfig 构造 NormalizedDevice。"""
     policy = material_parameter_policy(config.material, config.temperature_k)
     scales = config.normalization.scales(config.material, config.temperature_k)
     mesh = config.mesh.build(config.length_cm, scales.l0_cm)
     profile = config.doping_profile
+    _require_junctions_on_nodes(config, mesh, profile)
 
     ni = scales.n0_cm3
     net_doping_nd = profile.net_doping_cm3(mesh.x_nodes_cm) / ni

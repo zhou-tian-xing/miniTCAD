@@ -171,15 +171,22 @@ def _parse_mesh(block: dict, system: str) -> MeshSpec:
     _check_keys(block, "mesh", "mesh")
     kind = str(block.get("type", "")).strip().lower()
     if kind == "uniform":
-        return MeshSpec(kind="uniform", nodes=int(block["nodes"]))
+        return MeshSpec(kind="uniform", nodes=_node_count(block["nodes"]))
     if kind == "segmented":
         breaks = tuple(_breakpoint(value, system) for value in block["breakpoints"])
         return MeshSpec(
             kind="segmented",
             breakpoints_cm=breaks,
-            per_segment_nodes=tuple(int(n) for n in block["per_segment_nodes"]),
+            per_segment_nodes=tuple(_node_count(n) for n in block["per_segment_nodes"]),
         )
     raise UnitError(f"mesh.type must be 'uniform' or 'segmented', got {kind!r}")
+
+
+def _node_count(value: object) -> int:
+    """结点数必须是整数；浮点 201.7 不能被静默截断成 201（第 5.4 节）。"""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise UnitError(f"node counts must be integers, got {value!r}")
+    return value
 
 
 def _breakpoint(value: object, system: str) -> float:
@@ -242,6 +249,14 @@ def parse_config_dict(data: dict) -> DeviceConfig:
             raise UnitError("device.type pn requires left_terminal=p and right_terminal=n")
         if str(contacts.get("bias_definition", "left_minus_right")) != "left_minus_right":
             raise UnitError("contacts.bias_definition must be 'left_minus_right'")
+        right_voltage_V = contacts.get("right_voltage_V", 0.0)
+        if isinstance(right_voltage_V, bool) or not isinstance(right_voltage_V, (int, float)):
+            raise UnitError("contacts.right_voltage_V must be a number")
+        if float(right_voltage_V) != 0.0:
+            raise UnitError(
+                "contacts.right_voltage_V must be 0 V: the right terminal is the 0 V reference "
+                "and the bias is applied at the left terminal (V_app = V_left - V_right)"
+            )
 
     _check_solver(root.get("solver"))
 

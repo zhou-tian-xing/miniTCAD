@@ -12,12 +12,12 @@
 ```bash
 cd <repo-root>
 python -m pytest -q
-# 235 passed in 1.15s（0 skipped）
+# 251 passed in 0.93s（0 skipped；2026-11-03 加固后重跑）
 
 python -m pytest tests/test_oracle_bernoulli.py tests/test_oracle_srh.py \
     tests/test_oracle_poisson.py tests/test_oracle_sg.py \
     tests/test_oracle_qf_residual.py -q
-# 104 passed
+# 105 passed
 ```
 
 A 的 `C2_v1` 独立树（仅作对照，不被根包导入）：
@@ -69,11 +69,14 @@ cd C2_v1 && python -m pytest -q
   - 物理口径 `electron_edge_flux/hole_edge_flux`：平衡零电流、纯扩散闭式、迁移率线性；
   - QF 口径 `edge_flux_qf`：常数 `eta_n/eta_p` 时电流严格为 `0.0`；
   - QF 与物理路径在非平衡状态下的边通量相对误差 ≤ `1e-12`。
-- 新增 QF 残差集成 oracle（`test_oracle_qf_residual.py`，6 项）：
+- 新增 QF 残差集成 oracle（`test_oracle_qf_residual.py`，7 项）：
   - QF 内部行与旧 `residual` 内部行一致（Poisson ≤ `1e-13`、continuity ≤ `1e-11`）；
   - 接触行设成 `contact_targets_qf` 后严格为 0；
   - `evaluate_qf` 的 flux/rate 与独立函数一致；
   - 平衡标量解在 QF 残差下零电流、`np=1`；
+  - **参考量平移不变性**（2026-11-03 新增）：同一物理状态在三组 `ref_n/ref_p`
+    （`(0,0)`、`(2.3,-1.7)`、`(-5,4)`）下内部行完全一致，接触行仍严格为 0；
+    这把 §5 的 `ref_n/ref_p` 冻结口径变成可执行的断言；
   - 精度证据：`u=40`、`eta_n=1e-16` 时物理 `np-1` 已为 0，QF 仍给出正速率（`expm1`）。
 
 ## 4. 数值门槛对照
@@ -90,10 +93,16 @@ cd C2_v1 && python -m pytest -q
 
 ## 5. 遗留问题（需 A 确认 / 后续周处理）
 
-1. **`C2_v1` 4 项失败**：`tests/test_qf_stability.py` 仍调用旧
-   `residual_qf(device, bias, u, eta_n, eta_p, ref_n=..., ref_p=...)` 并期望
-   `(f, flux, rate)`；当前实现为 `residual_qf(QFState, device, bias) -> ndarray`。
-   根包测试不依赖它；建议 A 更新测试并在 `C2_v1` 内 `164 passed` 收口。
+1. **`C2_v1` 4 项失败（2026-11-03 复测确认：`4 failed, 164 passed`）**：
+   `C2_v1/tests/test_qf_stability.py` 的 4 个 `test_standard_pn_forward_bias[...]`
+   仍按旧签名调用 `residual_qf(device, bias, u, eta_n, eta_p, ref_n=..., ref_p=...)`
+   并解包 `(f, flux, rate)`；当前唯一残差接口是
+   `residual_qf(QFState, device, bias) -> NDArray`（诊断量走
+   `evaluate_qf(...) -> ResidualEvaluation(f, fluxes, recombination_nd)`）。
+   修法（A 执行，B 不改 A 的参考树）：用
+   `QFState(u=..., eta_n=..., eta_p=..., ref_n=..., ref_p=...)` 构造状态，
+   调 `evaluate_qf` 取 `.f / .fluxes / .recombination_nd`。
+   根包不依赖这些测试。
 2. **`solvers/` 未并入根包**：A 的 `gummel.py` 属 W4-A2，且同一文件残留两个
    `solve_gummel` 定义（旧版约 419 行、QF 版约 567 行，后者覆盖前者）。
    W4 合并前必须删旧留新，并由 A 确认 `ref_n/ref_p` 锚定右接触的契约。
@@ -106,6 +115,9 @@ cd C2_v1 && python -m pytest -q
    必须含结区断点；建议 W4 前由 A 确认后合并。
 6. **`solve` 仍未接线**：W3-B3 只交骨架，`minitcad solve` 返回 3 且不写结果文件；
    W4-B4 才接 `run()`。
+7. **已于 2026-11-03 关闭**：原第 5 项「`device/mesh` 的 A 版校验增强未合并」已并入根包
+   （分段网格结区必须落结点、整数结点数、右端必须 0 V、`w_interior` 一致性、接触浓度越界拒绝），
+   证据见 `reports/week02_acceptance.md` §6；`area_cm2` 可空仍**未**合并（B 的 W2 契约要求面积显式给出）。
 
 ## 6. 结论
 

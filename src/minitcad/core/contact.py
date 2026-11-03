@@ -38,7 +38,19 @@ def contact_concentrations_nd(net_doping_nd: float) -> tuple[float, float]:
     由局部电中性 C + p - n = 0 和质量作用 np = 1 解出：n = e^a，p = e^-a。
     """
     a = contact_potential_nd(net_doping_nd)
-    return math.exp(a), math.exp(-a)
+    # |a| 超过约 709 时 exp 会溢出；此时归一化接触浓度已无法用 float64 表示，
+    # 必须明确拒绝，而不是让 inf/0 流进残差（第 4.2 节的非法状态约定）。
+    try:
+        n, p = math.exp(a), math.exp(-a)
+    except OverflowError as exc:
+        raise ValueError(
+            "contact concentration overflows float64; reduce |C|/n_i or change the normalization"
+        ) from exc
+    if not (math.isfinite(n) and math.isfinite(p)) or n <= 0.0 or p <= 0.0:
+        raise ValueError(
+            "contact concentration is outside the supported float64 range"
+        )
+    return n, p
 
 
 def validate_pn_orientation(profile: DopingProfile) -> None:
