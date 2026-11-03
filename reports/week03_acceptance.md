@@ -12,7 +12,7 @@
 ```bash
 cd <repo-root>
 python -m pytest -q
-# 253 passed in 0.85s（0 skipped；2026-11-03 加固后重跑）
+# 262 passed in 1.01s（0 skipped；2026-11-03 加固 + API 冻结后重跑）
 
 python -m pytest tests/test_oracle_bernoulli.py tests/test_oracle_srh.py \
     tests/test_oracle_poisson.py tests/test_oracle_sg.py \
@@ -91,6 +91,7 @@ cd C2_v1 && python -m pytest -q
 | QF 精度收益（SG） | `u=350`、`Δη=1e-16`：物理路径 `(n_{i+1}-n_i)/h = 0.0`，QF 给出 `5.0e137`，与 `n·expm1(Δη)/h` 相对误差 `<=1e-12` | 通过（2026-11-03 新增） |
 | T07 纯扩散 | `j_n=m_n(n_R-n_L)/h`、`j_p=m_p(p_L-p_R)/h` | 通过 |
 | I-01（QF 扩展） | 只读、3M 交错、pack/unpack 往返 | 通过 |
+| 公共 API 冻结 | 包级 `__all__` 全解析、`contact_targets_qf` 的 `ref_*` 为关键字参数、dataclass 字段表与 22 列 CSV 列序不变 | 通过（`tests/test_public_api.py`，9 项） |
 
 ## 5. 遗留问题（需 A 确认 / 后续周处理）
 

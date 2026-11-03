@@ -12,7 +12,7 @@
 
 ```bash
 cd <repo-root>
-python -m pytest -q                 # 253 passed
+python -m pytest -q                 # 262 passed
 python -m pytest tests/test_core_mesh.py tests/test_core_region.py \
     tests/test_core_material.py tests/test_core_device.py \
     tests/test_core_contact.py tests/test_core_state.py \
@@ -35,6 +35,7 @@ PYTHONPATH=src python -m examples.verify_poisson
 - [x] `docs/a_b_interface_week02.md` 已按 QF 重构更新（B 已签，A 待签）。
 - [x] `docs/numerical_conventions.md` 已建立（§14.7 要求与接口会审记录配套的单位/符号/容差契约）。
 - [x] `docs/convergence_template.md`（§12.3 十章节模板）与 `.vscode/settings.json`（§14.5）已补齐。
+- [x] 公共 API 已冻结并用 `tests/test_public_api.py`（9 项）钉住包级 `__all__`、函数参数名、dataclass 字段与 CSV 列序。
 - [x] `reports/week02_acceptance.md` 即本文件；W3 记录见 `reports/week03_acceptance.md`。
 
 ## 3. QF 重构带来的 W2 变更
@@ -52,7 +53,7 @@ PYTHONPATH=src python -m examples.verify_poisson
 - 接触：`np=1`、`p-n+C=0`、`u_L=a(C_L)+v` 误差 ≤ `1e-10`（T03/T04）。
 - 接触 QF 反解：由 `(u,eta_n,eta_p)` 重建的 `n,p` 与物理 `contact_targets` 相对误差 ≤ `1e-14`。
 - `NormalizedDevice.L0_cm` 与附录 C 一致（`tests/test_core_device.py`）。
-- 全量测试：**253 passed, 0 skipped**（2026-10-25 基线 235 项 + 2026-11-03 新增 18 项校验/契约/精度测试）。
+- 全量测试：**262 passed, 0 skipped**（2026-10-25 基线 235 项 + 2026-11-03 新增 27 项：校验/契约/精度/公共 API 冻结）。
 
 ## 5. 未通过项 / 遗留
 

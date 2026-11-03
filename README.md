@@ -28,7 +28,7 @@ ai_example/        单文件教学示例（与本规范无接口关系）
 ## 运行
 
 ```bash
-python -m pytest -q                                  # 全量（251 passed）
+python -m pytest -q                                  # 全量（262 passed）
 PYTHONPATH=src python -m minitcad.cli validate examples/pn_left_p_right_n.yaml
 PYTHONPATH=src python -m minitcad.cli validate examples/pn_left_p_right_n_si.yaml
 PYTHONPATH=src python -m examples.verify_poisson     # SI MMS + 均匀正弦加密误差比
@@ -41,7 +41,7 @@ PYTHONPATH=src python -m examples.verify_poisson     # SI MMS + 均匀正弦加�
 | 周 | B 的交付 | 状态 | 证据 |
 |---|---|---|---|
 | W1 | 包骨架、`pyproject.toml`、示例 YAML、`.vscode`、convergence 模板 | 完成 | `pyproject.toml`、`docs/convergence_template.md` |
-| W2 | `Mesh1D`、分段掺杂 `C̄`、材料/温度策略、接触、`State`、`NormalizedDevice`、cm↔SI、接口会审 | 完成 | `reports/week02_acceptance.md` |
+| W2 | `Mesh1D`、分段掺杂 `C̄`、材料/温度策略、接触、`State`、`NormalizedDevice`、cm↔SI、接口会审、公共 API 冻结 | 完成 | `reports/week02_acceptance.md`、`tests/test_public_api.py` |
 | W3 | T01–T07 独立 oracle、反向 PN、`RunResult`+CLI 骨架、22 列 CSV schema、QF 口径核对 | 完成 | `reports/week03_acceptance.md` |
 | W4 | `sweep`、`run()` 与 `solve` 接线、T08/T09 | 未开始 | 需 A 的 `solvers/gummel.py` 合并 |
 

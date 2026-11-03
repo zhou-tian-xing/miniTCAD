@@ -57,6 +57,7 @@
 | QF 残差集成 | `src/minitcad/discretization/residual.py`（A） | `tests/test_oracle_qf_residual.py` |
 | 平衡标量初值 | `src/minitcad/simulation/equilibrium.py`（A） | `tests/test_oracle_qf_residual.py` |
 | `RunResult` / CLI / 22 列 CSV schema | `src/minitcad/simulation/run_result.py`、`cli.py`、`io/results_csv.py` | `tests/test_run_result.py`、`test_cli.py`、`test_results_csv.py` |
+| 公共 API 冻结（包级 `__all__`、函数参数名、dataclass 字段、CSV 列序） | `src/minitcad/core/__init__.py`、`io/__init__.py`、`discretization/__init__.py` | `tests/test_public_api.py`（9 项） |
 
 ## 4. QF 重构对 W2/W3 的影响（B 的处理）
 
@@ -106,4 +107,4 @@
 
 A：**待签**（请确认 §5 的 1–6 项，尤其是 `ref_n/ref_p` 与 `C2_v1` 遗留定义）
 
-B：**已签**（2026-10-25 复核 commit `b195ce5`；2026-11-03 加固复核，根包 `pytest -q` = 251 passed）
+B：**已签**（2026-10-25 复核 commit `b195ce5`；2026-11-03 加固复核 + 公共 API 冻结，根包 `pytest -q` = 262 passed）
