@@ -104,7 +104,7 @@ QF 精度改写（A 的 `b195ce5`）：SG 用 `expm1(Δη)`、SRH 分子用 `exp
 
 | 项 | 判据 | 证据 |
 |---|---|---|
-| 接触中性 / 质量作用 | `|np-1| ≤ 1e-10`、`|p-n+C| ≤ 1e-10·max(1,|C|)` | T03 |
+| 接触中性 / 质量作用 | `abs(np-1) <= 1e-10`、`abs(p-n+C) <= 1e-10*max(1,abs(C))` | T03 |
 | 极性 / 势垒 | `V>0` 时 `u_R-u_L` 减少 `v`，偏差 `≤ 1e-10` | T04 |
 | Bernoulli | 相对误差 `≤ 3e-14`；反射恒等式 `B(-z) = B(z)+z` | T01 |
 | SRH 异寿命 | `19/47`，误差 `≤ 1e-12` | T02 |
@@ -135,7 +135,7 @@ QF 精度改写（A 的 `b195ce5`）：SG 用 `expm1(Δη)`、SRH 分子用 `exp
 | 日期 | 变更 | 影响 | 提交 |
 |---|---|---|---|
 | 2026-10-25 | 并入 A 的 QF 残差/SG/SRH/平衡初值，新增 `QFState`/`contact_targets_qf`/`PhysicsDiagnostics` | 内部表示变化，公开 API 不变 | `98ff013` |
-| 2026-11-03 | 收紧 W2 校验：`segmented` 结区必须落结点、结点数必须整数、`w` 一致性检查、右端必须 0 V、接触浓度越界拒绝；新增 `docs/numerical_conventions.md`、`docs/convergence_template.md` | 仅拒绝此前被静默接受的非法配置；合法配置结果不变（235→245 passed） | 本次提交 |
+| 2026-11-03 | 收紧 W2 校验：`segmented` 结区必须落结点、结点数必须整数、`w` 一致性检查、右端必须 0 V、接触浓度越界拒绝；新增 `docs/numerical_conventions.md`、`docs/convergence_template.md` | 仅拒绝此前被静默接受的非法配置；合法配置结果不变（235 → 251 passed，新增 16 项测试） | 本次提交 |
 
 ## 9. 证据索引
 

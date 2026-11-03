@@ -52,7 +52,7 @@ PYTHONPATH=src python -m examples.verify_poisson
 - 接触：`np=1`、`p-n+C=0`、`u_L=a(C_L)+v` 误差 ≤ `1e-10`（T03/T04）。
 - 接触 QF 反解：由 `(u,eta_n,eta_p)` 重建的 `n,p` 与物理 `contact_targets` 相对误差 ≤ `1e-14`。
 - `NormalizedDevice.L0_cm` 与附录 C 一致（`tests/test_core_device.py`）。
-- 全量测试：**251 passed, 0 skipped**（W2 原有 118 项 + W3 oracle/QF/CLI/CSV + 2026-11-03 新增 16 项）。
+- 全量测试：**251 passed, 0 skipped**（2026-10-25 基线 235 项 + 2026-11-03 新增 16 项校验/契约测试）。
 
 ## 5. 未通过项 / 遗留
 
