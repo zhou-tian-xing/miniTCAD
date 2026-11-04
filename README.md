@@ -21,7 +21,7 @@ src/minitcad/
   cli.py           B：minitcad validate / solve
 tests/             B 的独立 oracle（T01–T09）、API/CLI/writer 契约、基准快照
 examples/          cm / SI 同器件 YAML、W4 基准配置与数据快照、SI MMS 验证器
-docs/              数学契约、A/B 接口会审、数值约定、convergence 模板、B 路线图
+docs/              数学契约、A/B 接口会审、数值约定、Gummel 数学说明、convergence 模板、B 路线图
 reports/           W2 / W3 / W4(Gate 1) 验收记录
 C2_v1/             A 的独立参考树（不被根包导入）
 ai_example/        单文件教学示例（与本规范无接口关系）

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from minitcad.core.constants import q
+from minitcad.core.contact import contact_concentrations_nd, contact_potential_nd
 from minitcad.core.device import DeviceConfig, NormalizedDevice
 from minitcad.core.state import SolveResult
 from minitcad.simulation.run_result import Attempt
@@ -148,8 +149,6 @@ def benchmark_fields(config: DeviceConfig, device: NormalizedDevice) -> dict[str
     """
     left = device.net_doping_left_nd
     right = device.net_doping_right_nd
-    from minitcad.core.contact import contact_concentrations_nd, contact_potential_nd
-
     n_l, p_l = contact_concentrations_nd(left)
     n_r, p_r = contact_concentrations_nd(right)
     a_l = contact_potential_nd(left)
