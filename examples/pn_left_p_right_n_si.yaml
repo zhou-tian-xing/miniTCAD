@@ -51,7 +51,7 @@ contacts:
   bias_definition: left_minus_right
 
 solver:
-  method: newton
+  method: gummel
 
 output:
   directory: runs/pn_example_si

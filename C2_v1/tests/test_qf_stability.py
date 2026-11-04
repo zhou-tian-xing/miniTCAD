@@ -11,7 +11,8 @@ from minitcad.core.region import Region
 from minitcad.core.material import SILICON
 from minitcad import simulation, solvers
 from minitcad.discretization.sg import edge_flux_qf
-from minitcad.discretization.residual import residual_qf
+from minitcad.core.state import QFState
+from minitcad.discretization.residual import evaluate_qf
 from minitcad.physics.recombination import (
     srh_recombination_qf,
 )
@@ -115,18 +116,18 @@ def test_standard_pn_forward_bias(bias):
     state = result.state
     assert np.all(state.n > 0)
     assert np.all(state.p > 0)
-    # 重新计算稳定内部残差
-    f, flux, rate = residual_qf(
-        device,
-        bias,
-        out["u"],
-        out["eta_n"],
-        out["eta_p"],
+    # 用最终 QF 状态重算残差；求解器内部诊断量必须与公开入口逐位一致
+    qf = QFState(
+        u=out["u"],
+        eta_n=out["eta_n"],
+        eta_p=out["eta_p"],
         ref_n=out["ref_n"],
         ref_p=out["ref_p"],
     )
+    evaluation = evaluate_qf(qf, device, bias)
+    flux = evaluation.fluxes
     np.testing.assert_allclose(
-        f,
+        evaluation.f.reshape(device.mesh.node_count, 3),
         out["residual"],
         rtol=0,
         atol=0,

@@ -2,3 +2,7 @@
 
 内部计算全部用无量纲量；cm 是默认工程单位，SI 输入输出都经 minitcad.io.units 换算。
 """
+
+from minitcad.api import run, write_required_outputs
+
+__all__ = ["run", "write_required_outputs"]

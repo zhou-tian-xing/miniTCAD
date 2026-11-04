@@ -48,6 +48,9 @@ class RunResult:
     successful: tuple[Attempt, ...] = ()
     decision: str = DECISION_REJECTED
     failure_reason: str | None = None
+    # run_id 与配置指纹写进 CSV/报告的每一行，三者必须能互相追溯（§12.1、§12.4）。
+    run_id: str = ""
+    config_sha256: str = ""
 
     def __post_init__(self) -> None:
         if self.decision not in DECISIONS:
@@ -60,3 +63,8 @@ class RunResult:
     @property
     def accepted(self) -> bool:
         return self.decision == DECISION_ACCEPTED
+
+    @property
+    def cancelled(self) -> bool:
+        """协作式取消：`run()` 把取消记为 REJECTED，但原因区别于求解失败（§10.2）。"""
+        return self.failure_reason == "CANCELLED"

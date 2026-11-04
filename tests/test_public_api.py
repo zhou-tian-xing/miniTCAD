@@ -12,13 +12,14 @@ import inspect
 
 import pytest
 
+import minitcad
 import minitcad.core as core
 import minitcad.io as io
 from minitcad.discretization import ResidualEvaluation, evaluate_qf, residual_qf
 from minitcad.simulation import Attempt, RunResult, solve_equilibrium_scalar
 
 
-@pytest.mark.parametrize("module", [core, io])
+@pytest.mark.parametrize("module", [minitcad, core, io])
 def test_dunder_all_resolves(module):
     missing = [name for name in module.__all__ if not hasattr(module, name)]
     assert missing == []
@@ -94,6 +95,7 @@ def test_run_result_contract():
     ]
     assert [field.name for field in dataclasses.fields(RunResult)] == [
         "config", "device", "attempts", "successful", "decision", "failure_reason",
+        "run_id", "config_sha256",
     ]
     empty = RunResult(config=None, device=None)
     assert empty.accepted is False and empty.decision == "REJECTED"
@@ -101,3 +103,18 @@ def test_run_result_contract():
 
 def test_equilibrium_initialisation_is_exported():
     assert callable(solve_equilibrium_scalar)
+
+
+def test_run_entry_points_are_exported_at_top_level():
+    """§10.2：GUI 与 CLI 只通过 `run`/`write_required_outputs` 发起正式计算。"""
+    assert callable(minitcad.run) and callable(minitcad.write_required_outputs)
+    signature = inspect.signature(minitcad.run)
+    assert list(signature.parameters) == ["config", "progress", "should_stop"]
+    assert signature.parameters["progress"].default is None
+    # 取消回调的默认值必须可调用且返回 False（§10.2 的 `lambda: False` 语义）。
+    assert callable(signature.parameters["should_stop"].default)
+    assert signature.parameters["should_stop"].default() is False
+
+    writer = inspect.signature(minitcad.write_required_outputs)
+    assert list(writer.parameters) == ["run_result", "path", "overwrite"]
+    assert writer.parameters["overwrite"].default is False

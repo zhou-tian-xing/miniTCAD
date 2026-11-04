@@ -57,11 +57,46 @@ def test_validate_rejects_broken_config_without_traceback(tmp_path, capsys):
     assert "units.system" in captured.err
 
 
-def test_solve_is_honestly_not_wired(capsys):
-    assert cli.main(["solve", str(CM_YAML)]) == 3
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "not wired yet" in captured.err
+BASELINE_YAML = EXAMPLES / "pn_baseline_0_to_030.yaml"
+
+
+def test_solve_writes_the_three_required_files(tmp_path, capsys):
+    """W4-B4：solve 走 run() + writer，产出第 12 节的三文件（§12.4）。"""
+    assert cli.main(["solve", str(BASELINE_YAML), "--out", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "decision: ACCEPTED" in out
+    for name in ("comparison.csv", "comparison.png", "convergence.md"):
+        assert (tmp_path / name).is_file(), name
+    assert cli.main(["validate", str(tmp_path / "comparison.csv")]) == 0
+
+
+def test_solve_refuses_to_overwrite_existing_outputs(tmp_path, capsys):
+    assert cli.main(["solve", str(BASELINE_YAML), "--out", str(tmp_path)]) == 0
+    capsys.readouterr()
+    assert cli.main(["solve", str(BASELINE_YAML), "--out", str(tmp_path)]) == 2
+    assert "already contains" in capsys.readouterr().err
+    assert cli.main(["solve", str(BASELINE_YAML), "--out", str(tmp_path), "--overwrite"]) == 0
+
+
+def test_solve_reports_newton_as_not_wired(tmp_path, capsys):
+    """A 的 Newton 在 W5 落地；此时必须明确拒绝，不能悄悄换成 Gummel。"""
+    text = BASELINE_YAML.read_text(encoding="utf-8").replace("method: gummel", "method: newton")
+    config = tmp_path / "newton.yaml"
+    config.write_text(text, encoding="utf-8")
+    assert cli.main(["solve", str(config), "--out", str(tmp_path / "out")]) == 3
+    assert "NOT_WIRED" in capsys.readouterr().err
+
+
+def test_solve_failure_is_reported_with_bias(tmp_path, capsys):
+    """强偏压 + 单次迭代：必须 REJECTED，并在 stderr/摘要里给出偏压与原因。"""
+    text = BASELINE_YAML.read_text(encoding="utf-8")
+    text = text.replace("max_iter: 60", "max_iter: 1").replace("stop_V: 0.3", "stop_V: 0.3")
+    config = tmp_path / "fail.yaml"
+    config.write_text(text, encoding="utf-8")
+    assert cli.main(["solve", str(config), "--out", str(tmp_path / "out")]) == 2
+    out = capsys.readouterr().out
+    assert "decision: REJECTED" in out
+    assert "reason" in out
 
 
 def test_validate_missing_file_is_rejected(tmp_path, capsys):

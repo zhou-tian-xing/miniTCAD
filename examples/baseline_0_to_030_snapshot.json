@@ -1,0 +1,77 @@
+{
+  "config": "examples/pn_baseline_0_to_030.yaml",
+  "config_sha256": "fd18583e815b874004a3db0b6ad2d8417596377cc211853f00748fa210e243e5",
+  "environment": {
+    "python": "3.14.6",
+    "numpy": "2.5.3",
+    "scipy": "1.18.0"
+  },
+  "generated": "2026-11-04",
+  "decision": "ACCEPTED",
+  "biases": [
+    {
+      "bias_V": 0.0,
+      "iterations": 0,
+      "residual_norm": 6.694195202391561e-10,
+      "update_norm": 0.0,
+      "Jterminal_A_cm2": 0.0,
+      "I_A": 0.0
+    },
+    {
+      "bias_V": 0.05,
+      "iterations": 3,
+      "residual_norm": 2.9054015267874056e-14,
+      "update_norm": 4.5436015283864193e-10,
+      "Jterminal_A_cm2": 8.585176581387055e-09,
+      "I_A": 8.585176581387056e-13
+    },
+    {
+      "bias_V": 0.1,
+      "iterations": 3,
+      "residual_norm": 3.3702043253023244e-14,
+      "update_norm": 1.5259988384239204e-09,
+      "Jterminal_A_cm2": 3.989607686978611e-08,
+      "I_A": 3.989607686978611e-12
+    },
+    {
+      "bias_V": 0.15,
+      "iterations": 3,
+      "residual_norm": 8.64383764564991e-14,
+      "update_norm": 6.664704233578407e-09,
+      "Jterminal_A_cm2": 1.9062033266700486e-07,
+      "I_A": 1.9062033266700488e-11
+    },
+    {
+      "bias_V": 0.2,
+      "iterations": 3,
+      "residual_norm": 5.852780304849148e-13,
+      "update_norm": 3.5477897317428296e-08,
+      "Jterminal_A_cm2": 1.0546067408434296e-06,
+      "I_A": 1.0546067408434296e-10
+    },
+    {
+      "bias_V": 0.25,
+      "iterations": 3,
+      "residual_norm": 4.27651684731245e-12,
+      "update_norm": 2.1440857542815606e-07,
+      "Jterminal_A_cm2": 6.503208580091963e-06,
+      "I_A": 6.503208580091964e-10
+    },
+    {
+      "bias_V": 0.3,
+      "iterations": 4,
+      "residual_norm": 3.330875188112259e-11,
+      "update_norm": 3.627877158611212e-15,
+      "Jterminal_A_cm2": 4.256668310039106e-05,
+      "I_A": 4.256668310039106e-09
+    }
+  ],
+  "validation": {
+    "np_error": 2.220446049250313e-16,
+    "zero_current": 0.0,
+    "current_spread": 2.9702285877172294e-09,
+    "contact_error": 0.0,
+    "max_residual": 6.694195202391561e-10,
+    "max_update": 2.1440857542815606e-07
+  }
+}

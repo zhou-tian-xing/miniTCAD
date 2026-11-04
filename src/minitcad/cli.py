@@ -1,14 +1,8 @@
-"""命令行入口（W3 骨架）。
+"""命令行入口：`minitcad validate` 与 `minitcad solve`（§10.2、§14.7）。
 
-`validate` 已可用：校验 YAML 配置，或校验已有 comparison.csv 的表头。
-`solve` 只报告“未接线”；在 W4-B4 接上 run() 之前不产生任何结果文件，
-也不允许打印看似成功的 I-V。
-
-用法（在仓库根目录）：
-
-    PYTHONPATH=src python -m minitcad.cli validate examples/pn_left_p_right_n.yaml
-    PYTHONPATH=src python -m minitcad.cli validate runs/pn_example/comparison.csv
-    PYTHONPATH=src python -m minitcad.cli solve examples/pn_left_p_right_n.yaml
+`solve` 与 GUI 走同一个 `api.run()` + `api.write_required_outputs()`，
+因此两端的偏压点、失败原因与三文件内容必然一致。
+退出码：0 = ACCEPTED，2 = REJECTED/配置非法，3 = 求解器未落地（`method: newton`，W5）。
 """
 
 from __future__ import annotations
@@ -19,6 +13,7 @@ import sys
 
 import yaml
 
+from minitcad.api import run, write_required_outputs
 from minitcad.core.device import build_device
 from minitcad.io.config import load_config
 from minitcad.io.results_csv import check_header, read_header
@@ -70,6 +65,11 @@ def _validate_yaml(path: pathlib.Path) -> int:
         f"{device.net_doping_right_nd:.6g} (normalized)"
     )
     print(f"material     : {device.material_parameter_policy} @ {device.temperature_k} K")
+    print(f"solver       : {config.solver.method} (max_iter {config.solver.max_iter})")
+    print(
+        f"sweep        : {config.sweep.start_V} -> {config.sweep.stop_V} V, "
+        f"step {config.sweep.step_V} V"
+    )
     return EXIT_OK
 
 
@@ -100,13 +100,46 @@ def _validate(args: argparse.Namespace) -> int:
 
 
 def _solve(args: argparse.Namespace) -> int:
-    """W3 只立骨架：明确未接线，绝不伪造结果。"""
-    print(
-        "solve: not wired yet (W4-B4 connects run()); no result files were written",
-        file=sys.stderr,
-    )
-    print(f"solve: requested output directory ignored: {args.out}", file=sys.stderr)
-    return EXIT_NOT_WIRED
+    """求解并写出三个固定文件；失败也照实打印原因，不产生假的成功摘要。"""
+    path = pathlib.Path(args.path)
+    try:
+        config = load_config(path)
+    except Exception as exc:
+        print(f"REJECTED: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+
+    directory = args.out or config.output.directory
+    print(BANNER)
+    print(f"config  : {path}")
+    print(f"output  : {directory}")
+    print(f"solver  : {config.solver.method}")
+
+    def progress(bias_V: float, status: str) -> None:
+        print(f"  [{status:4s}] V_app = {bias_V:.4f} V")
+
+    try:
+        result = run(config, progress=progress)
+    except NotImplementedError as exc:
+        print(f"NOT_WIRED: {exc}", file=sys.stderr)
+        return EXIT_NOT_WIRED
+    except Exception as exc:
+        print(f"REJECTED: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+
+    try:
+        written = write_required_outputs(result, directory, overwrite=args.overwrite)
+    except FileExistsError as exc:
+        print(f"REJECTED: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+
+    print(f"decision: {result.decision}")
+    if result.failure_reason is not None:
+        print(f"reason  : {result.failure_reason}")
+    print(f"run_id  : {result.run_id}")
+    print(f"accepted: {len(result.successful)} / {len(result.attempts)} bias points")
+    for name, written_path in zip(("comparison.csv", "comparison.png", "convergence.md"), written):
+        print(f"  wrote {name:16s} {written_path}")
+    return EXIT_OK if result.accepted else EXIT_REJECTED
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -120,9 +153,14 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("path", help="*.yaml/*.yml config, or an existing *.csv result")
     validate.set_defaults(func=_validate)
 
-    solve = sub.add_parser("solve", help="solve a config (not wired until W4)")
+    solve = sub.add_parser("solve", help="solve a config and write the three required files")
     solve.add_argument("path", help="YAML config")
-    solve.add_argument("--out", default="runs/pn_example", help="output directory")
+    solve.add_argument("--out", default=None, help="output directory (overrides output.directory)")
+    solve.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace existing comparison.csv/comparison.png/convergence.md",
+    )
     solve.set_defaults(func=_solve)
     return parser
 

@@ -17,6 +17,10 @@ from minitcad.core.device import (
     DeviceConfig,
     MeshSpec,
     NormalizationConfig,
+    SOLVER_METHODS,
+    OutputConfig,
+    SolverConfig,
+    SweepConfig,
 )
 from minitcad.core.material import Material, get_material
 from minitcad.core.region import Region
@@ -214,6 +218,91 @@ def _check_solver(block: object) -> None:
         raise UnitError(f"solver.method must be one of {_VALID_SOLVER_METHODS}, got {method!r}")
 
 
+def _parse_solver(block: object) -> SolverConfig:
+    """`solver` 块；缺省时用 dataclass 的默认值。"""
+    if block is None:
+        return SolverConfig()
+    if not isinstance(block, dict):
+        raise UnitError("solver must be a mapping")
+    allowed = {"method", "jacobian", "tol_residual", "tol_update", "max_iter",
+               "alpha_min", "positive_scale_floor", "n_floor"}
+    unknown = sorted(set(block) - allowed)
+    if unknown:
+        raise UnitError(f"solver: unknown field(s) {unknown}")
+    method = str(block.get("method", "gummel")).strip().lower()
+    if method not in SOLVER_METHODS:
+        raise UnitError(f"solver.method must be one of {SOLVER_METHODS}, got {method!r}")
+    return SolverConfig(
+        method=method,
+        jacobian=str(block.get("jacobian", "sparse_fd")).strip().lower(),
+        tol_residual=_positive_float(block.get("tol_residual", 1.0e-8), "solver.tol_residual"),
+        tol_update=_positive_float(block.get("tol_update", 1.0e-6), "solver.tol_update"),
+        max_iter=_integer(block.get("max_iter", 60), "solver.max_iter"),
+        alpha_min=_positive_float(block.get("alpha_min", 1.0e-6), "solver.alpha_min"),
+        n_floor=_positive_float(
+            block.get("n_floor", block.get("positive_scale_floor", 1.0e-15)), "solver.n_floor"
+        ),
+    )
+
+
+def _parse_sweep(block: object) -> SweepConfig:
+    """`sweep` 块。W4 是固定步进：`step_V` 缺省时取 `initial_step_V`。
+
+    `min_step_V/max_step_V/grow_factor/shrink_factor` 属于 W5 的自适应模式，
+    这里接受但暂不使用，避免以后改 YAML schema（§9.2）。
+    """
+    if block is None:
+        return SweepConfig()
+    if not isinstance(block, dict):
+        raise UnitError("sweep must be a mapping")
+    allowed = {"start_V", "stop_V", "step_V", "initial_step_V", "min_step_V",
+               "max_step_V", "grow_factor", "shrink_factor"}
+    unknown = sorted(set(block) - allowed)
+    if unknown:
+        raise UnitError(f"sweep: unknown field(s) {unknown}")
+    step = block.get("step_V", block.get("initial_step_V", 0.05))
+    return SweepConfig(
+        start_V=_float(block.get("start_V", 0.0), "sweep.start_V"),
+        stop_V=_float(block.get("stop_V", 0.3), "sweep.stop_V"),
+        step_V=_float(step, "sweep.step_V"),
+    )
+
+
+def _parse_output(block: object) -> OutputConfig:
+    """`output` 块：目录与文件单位制；单位制只影响 writer（§12.1）。"""
+    if block is None:
+        return OutputConfig()
+    if not isinstance(block, dict):
+        raise UnitError("output must be a mapping")
+    allowed = {"directory", "unit_system"}
+    unknown = sorted(set(block) - allowed)
+    if unknown:
+        raise UnitError(f"output: unknown field(s) {unknown}")
+    return OutputConfig(
+        directory=str(block.get("directory", "runs/pn_example")),
+        unit_system=str(block.get("unit_system", "cm")).strip().lower(),
+    )
+
+
+def _float(value: object, where: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise UnitError(f"{where} must be a number, got {value!r}")
+    return float(value)
+
+
+def _positive_float(value: object, where: str) -> float:
+    number = _float(value, where)
+    if number <= 0.0:
+        raise UnitError(f"{where} must be > 0, got {number!r}")
+    return number
+
+
+def _integer(value: object, where: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise UnitError(f"{where} must be an integer, got {value!r}")
+    return value
+
+
 def parse_config_dict(data: dict) -> DeviceConfig:
     """由已解析的字典构造 DeviceConfig。"""
     root = _as_mapping(data, "config")
@@ -258,8 +347,6 @@ def parse_config_dict(data: dict) -> DeviceConfig:
                 "and the bias is applied at the left terminal (V_app = V_left - V_right)"
             )
 
-    _check_solver(root.get("solver"))
-
     return DeviceConfig(
         length_cm=_read_required(device_block, "length", system),
         area_cm2=_read_required(device_block, "area", system),
@@ -271,6 +358,10 @@ def parse_config_dict(data: dict) -> DeviceConfig:
         device_type=device_type,
         orientation=orientation,
         right_voltage_V=float(contacts.get("right_voltage_V", 0.0)),
+        input_unit_system=system,
+        solver=_parse_solver(root.get("solver")),
+        sweep=_parse_sweep(root.get("sweep")),
+        output=_parse_output(root.get("output")),
     )
 
 
@@ -281,3 +372,76 @@ def load_config(path: str | Path) -> DeviceConfig:
     if not isinstance(data, dict):
         raise UnitError(f"{path}: YAML root must be a mapping")
     return parse_config_dict(data)
+
+
+def config_payload(config: DeviceConfig) -> dict:
+    """规范化配置字典：字段全、顺序无关（`sort_keys`），供指纹与复现审计。"""
+    return {
+        "length_cm": config.length_cm,
+        "area_cm2": config.area_cm2,
+        "temperature_K": config.temperature_k,
+        "input_unit_system": config.input_unit_system,
+        "device": {
+            "type": config.device_type,
+            "orientation": config.orientation,
+            "right_voltage_V": config.right_voltage_V,
+        },
+        "material": {
+            "name": config.material.name,
+            "epsilon_relative": config.material.epsilon_relative,
+            "reference_temperature_K": config.material.reference_temperature_k,
+            "intrinsic_density_cm3": config.material.intrinsic_density_cm3,
+            "mobility_n_cm2_per_Vs": config.material.mobility_n_cm2_per_Vs,
+            "mobility_p_cm2_per_Vs": config.material.mobility_p_cm2_per_Vs,
+            "lifetime_n_s": config.material.lifetime_n_s,
+            "lifetime_p_s": config.material.lifetime_p_s,
+            "bandgap_eV": config.material.bandgap_eV,
+        },
+        "regions": [
+            {
+                "start_cm": region.start_cm,
+                "end_cm": region.end_cm,
+                "material": region.material,
+                "acceptor_cm3": region.acceptor_cm3,
+                "donor_cm3": region.donor_cm3,
+            }
+            for region in config.regions
+        ],
+        "mesh": {
+            "kind": config.mesh.kind,
+            "nodes": config.mesh.nodes,
+            "breakpoints_cm": list(config.mesh.breakpoints_cm),
+            "per_segment_nodes": list(config.mesh.per_segment_nodes),
+        },
+        "normalization": {
+            "reference_diffusivity_cm2_s": config.normalization.reference_diffusivity_cm2_s,
+            "reference_mobility_cm2_per_Vs": config.normalization.reference_mobility_cm2_per_Vs,
+        },
+        "solver": {
+            "method": config.solver.method,
+            "jacobian": config.solver.jacobian,
+            "tol_residual": config.solver.tol_residual,
+            "tol_update": config.solver.tol_update,
+            "max_iter": config.solver.max_iter,
+            "alpha_min": config.solver.alpha_min,
+            "n_floor": config.solver.n_floor,
+        },
+        "sweep": {
+            "start_V": config.sweep.start_V,
+            "stop_V": config.sweep.stop_V,
+            "step_V": config.sweep.step_V,
+        },
+        "output": {
+            "directory": config.output.directory,
+            "unit_system": config.output.unit_system,
+        },
+    }
+
+
+def config_fingerprint(config: DeviceConfig) -> str:
+    """规范化配置的 SHA-256，写进 CSV 的 `config_sha256` 与报告的 Run summary。"""
+    import hashlib
+    import json
+
+    payload = json.dumps(config_payload(config), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()

@@ -5,6 +5,9 @@
 > **2026-11-03 复核**：B 重跑双方测试并收紧三处 W2 校验（分段网格结区落结点、整数结点数、
 > 右端 0 V），新增 `ref_n/ref_p` 平移不变性断言；单位/符号/容差契约另见
 > `docs/numerical_conventions.md`（§14.7 要求与本文件配套）。
+> **2026-11-04 W4**：`solvers/` 并入根包（`gummel.py`、`convergence.py`），
+> `C2_v1` 的 4 个旧签名测试已修好、`solvers/convergence.py` 补全，`RunResult` 增加
+> `run_id/config_sha256`；`run()`/`write_required_outputs()` 与三文件 writer 初版落地。
 > **依据**：`目的与规划.md` §14.7、§10.3；A 的 `C2_v1/src/minitcad/discretization/residual.py`
 > 头注释与 `C2_v1/tests/test_qf_state.py`、`test_qf_stability.py`。
 > **Owner**：B 维护本表，A 校核。
@@ -13,10 +16,10 @@
 
 | 项 | 值 |
 |---|---|
-| 接口版本 | `w2-w3/qf-v1`（在 2026-10-18 冻结版上增加 QF 内部表示；2026-11-03 加固不改字段名） |
+| 接口版本 | `w2-w4/qf-v1`（在 2026-10-18 冻结版上增加 QF 内部表示与 W4 运行入口；不改已冻结字段名） |
 | 批准人 A / B | 待签 / B（2026-10-25 复核 `b195ce5`；2026-11-03 加固复核） |
-| 变更日期 | 2026-10-25（初版）、2026-11-03（加固） |
-| 对应 git commit | A：`b195ce5`；B：`98ff013` 之后的加固提交（根 `src/minitcad`） |
+| 变更日期 | 2026-10-25（初版）、2026-11-03（加固）、2026-11-04（W4 运行入口） |
+| 对应 git commit | A：`b195ce5`；B：`98ff013`、`be4a1ee`+ 加固与 W4 提交（根 `src/minitcad`） |
 | 配套契约文件 | `docs/numerical_conventions.md`（单位/符号/容差/非法状态）、`docs/convergence_template.md`（§12.3） |
 
 ## 2. 会审项（QF 版）
@@ -58,6 +61,9 @@
 | 平衡标量初值 | `src/minitcad/simulation/equilibrium.py`（A） | `tests/test_oracle_qf_residual.py` |
 | `RunResult` / CLI / 22 列 CSV schema | `src/minitcad/simulation/run_result.py`、`cli.py`、`io/results_csv.py` | `tests/test_run_result.py`、`test_cli.py`、`test_results_csv.py` |
 | 公共 API 冻结（包级 `__all__`、函数参数名、dataclass 字段、CSV 列序） | `src/minitcad/core/__init__.py`、`io/__init__.py`、`discretization/__init__.py` | `tests/test_public_api.py`（9 项） |
+| **运行入口** | `run(config, progress, should_stop) -> RunResult`、`write_required_outputs(run, path, overwrite) -> (csv, png, md)` | `src/minitcad/api.py`、`simulation/{dc,sweep,diagnostics}.py` | `tests/test_api_run.py`、`test_week04_gate1.py` |
+| **求解器接口** | `solve_gummel(device, bias_V, initial_state, *, tol_residual, tol_update, max_iter, alpha_min, n_floor, diagnostics)`；收敛判据 `scaled_residual_qf`/`scaled_update`/`is_converged` | `src/minitcad/solvers/` | `tests/test_week04_gate1.py`、`C2_v1/tests/test_qf_stability.py` |
+| **三文件 writer（初版）** | `comparison.csv` 22 列、`comparison.png` 6 面板、`convergence.md` 十节；`run_id`/`config_sha256` 三者一致 | `io/results_csv.py`、`io/plot.py`、`io/report.py` | `tests/test_io_writer.py`（11 项） |
 
 ## 4. QF 重构对 W2/W3 的影响（B 的处理）
 
@@ -82,10 +88,12 @@
 
 ## 5. 待 A 确认的开放项
 
-1. **`ref_n/ref_p` 的冻结定义**（B 侧已加断言，待 A 签字）：A 的 `solve_gummel` 以右接触为参考
-   （`ref_n=log(n_R)-u_R`、`ref_p=-log(p_R)-u_R`）。B 的 `QFState` 默认 0，
-   `contact_targets_qf` 显式接收 `ref_*`。2026-11-03 新增的平移不变性测试证明两者在残差上等价，
-   因此 W4 合并 `solvers/gummel.py` 时可以自由选择锚点，但**签名里必须保留 `ref_n/ref_p`**。
+1. ~~`ref_n/ref_p` 的冻结定义~~ **已按代码实际口径记录（2026-11-04）**：
+   A 的 `solve_gummel` 用 `ref_n = log(n_R) - u_R`（右端电子）与 `ref_p = -log(p_L) - u_L`
+   （左端空穴）——两端各取一侧，使对应接触的 `eta` 为 0。
+   `tests/test_oracle_qf_residual.py::test_internal_rows_are_invariant_to_the_qf_reference_shift`
+   已证明残差对该选择不变，因此混合锚定不影响结果；**签名必须保留 `ref_n/ref_p`**，
+   且一次求解内不得改变（`_interpolate_qf` 会显式检查）。
 2. **`C2_v1` 遗留重复定义**：`C2_v1/.../solvers/gummel.py` 同时存在旧
    `solve_gummel`（约 419 行）与 QF 版（约 567 行），后者覆盖前者；
    合并到根包 W4 时必须只保留 QF 版。本次未把 `solvers/` 并入根包（属 W4）。

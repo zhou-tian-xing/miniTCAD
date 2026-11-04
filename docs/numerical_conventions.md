@@ -146,6 +146,7 @@ QF 精度改写（A 的 `b195ce5`）：SG 用 `expm1(Δη)`、SRH 分子用 `exp
 | 日期 | 变更 | 影响 | 提交 |
 |---|---|---|---|
 | 2026-10-25 | 并入 A 的 QF 残差/SG/SRH/平衡初值，新增 `QFState`/`contact_targets_qf`/`PhysicsDiagnostics` | 内部表示变化，公开 API 不变 | `98ff013` |
+| 2026-11-04 | W4：并入 A 的 `solvers/`（Gummel + 收敛判据）、新增 `api.run`/`write_required_outputs` 与三文件 writer 初版；`RunResult` 增加 `run_id/config_sha256`；`devices` 增加 `input_unit_system`、`solver/sweep/output` 配置块 | 新增运行入口与输出契约；已冻结的 Mesh/State/残差字段不变；根包 291 passed、`C2_v1` 168 passed | 本次提交 |
 | 2026-11-03 | 收紧 W2 校验：`segmented` 结区必须落结点、结点数必须整数、`w` 一致性检查、右端必须 0 V、接触浓度越界拒绝；新增 `docs/numerical_conventions.md`、`docs/convergence_template.md` | 仅拒绝此前被静默接受的非法配置；合法配置结果不变（235 → 262 passed，新增 27 项测试：18 项校验/契约 + 9 项公共 API 冻结） | 本次提交 |
 
 ## 9. 证据索引

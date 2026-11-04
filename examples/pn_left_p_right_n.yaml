@@ -50,7 +50,7 @@ contacts:
   bias_definition: left_minus_right
 
 solver:
-  method: newton              # or gummel
+  method: gummel              # W4 阶段只有 Gummel；A 的 Newton 在 W5 落地后可改回 newton
   jacobian: sparse_fd
   tol_residual: 1.0e-8
   tol_update: 1.0e-6

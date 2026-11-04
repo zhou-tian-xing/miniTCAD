@@ -1,0 +1,67 @@
+# W4-B2 标准基准：左 P / 右 N，0 -> 0.30 V，固定步长 0.05 V，201 结点均匀网格。
+# 方向与极性：P(left, x=0) -> N(right, x=L)；V_app = V_left - V_right；+V 为正向；右端 0 V。
+# 这份配置与 examples/pn_left_p_right_n.yaml 是同一器件，只把扫压范围收窄到 W4 的基线。
+
+units:
+  system: cm
+
+device:
+  type: pn
+  orientation: p_left_n_right
+  length_cm: 1.0e-3
+  area_cm2: 1.0e-4
+  temperature_K: 300.0
+
+material:
+  name: silicon
+  epsilon_relative: 11.7
+  intrinsic_density_cm3: 1.0e+10
+  mobility_n_cm2_per_Vs: 1350.0
+  mobility_p_cm2_per_Vs: 480.0
+  lifetime_n_s: 1.0e-6
+  lifetime_p_s: 2.0e-6
+  bandgap_eV: 1.12
+
+regions:
+  - start_cm: 0.0
+    end_cm: 2.5e-4
+    material: silicon
+    acceptor_cm3: 1.0e+16
+    donor_cm3: 0.0
+  - start_cm: 2.5e-4
+    end_cm: 1.0e-3
+    material: silicon
+    acceptor_cm3: 0.0
+    donor_cm3: 2.0e+15
+
+mesh:
+  type: uniform
+  nodes: 201
+
+normalization:
+  reference_diffusivity_cm2_s: 10.0
+
+contacts:
+  type: ideal_ohmic
+  left_terminal: p
+  right_terminal: n
+  right_voltage_V: 0.0
+  bias_definition: left_minus_right
+
+solver:
+  method: gummel
+  jacobian: sparse_fd
+  tol_residual: 1.0e-8
+  tol_update: 1.0e-6
+  max_iter: 60
+  alpha_min: 1.0e-6
+  positive_scale_floor: 1.0e-15
+
+sweep:
+  start_V: 0.0
+  stop_V: 0.3
+  step_V: 0.05
+
+output:
+  directory: runs/pn_baseline_0_to_030
+  unit_system: cm

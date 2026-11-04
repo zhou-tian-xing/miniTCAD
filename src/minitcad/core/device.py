@@ -6,7 +6,7 @@ DeviceConfig 存 YAML/API 里的 cm 字段；NormalizedDevice 是给求解器用
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isclose, isfinite
 
 import numpy as np
@@ -22,6 +22,9 @@ from minitcad.physics.normalization import NormalizationScales, build_normalizat
 DEVICE_PN = "pn"
 DEVICE_GENERIC_1D = "generic_1d"
 ORIENTATION_P_LEFT_N_RIGHT = "p_left_n_right"
+
+SOLVER_METHODS = ("gummel", "newton")
+UNIT_SYSTEMS = ("cm", "si")
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +91,73 @@ class NormalizationConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class SolverConfig:
+    """`solver` 块的求解器参数；`method` 只做标签，方程与残差不因此改变（§10.2）。"""
+
+    method: str = "gummel"
+    jacobian: str = "sparse_fd"
+    tol_residual: float = 1.0e-8
+    tol_update: float = 1.0e-6
+    max_iter: int = 60
+    alpha_min: float = 1.0e-6
+    n_floor: float = 1.0e-15
+
+    def __post_init__(self) -> None:
+        if self.method not in SOLVER_METHODS:
+            raise ValueError(f"solver.method must be one of {SOLVER_METHODS}, got {self.method!r}")
+        if not 0.0 < self.tol_residual < 1.0:
+            raise ValueError("solver.tol_residual must be in (0, 1)")
+        if not 0.0 < self.tol_update < 1.0:
+            raise ValueError("solver.tol_update must be in (0, 1)")
+        if isinstance(self.max_iter, bool) or not isinstance(self.max_iter, int) or self.max_iter < 1:
+            raise ValueError("solver.max_iter must be a positive integer")
+        if not 0.0 < self.alpha_min <= 1.0:
+            raise ValueError("solver.alpha_min must be in (0, 1]")
+        if not 0.0 < self.n_floor < 1.0:
+            raise ValueError("solver.n_floor must be in (0, 1)")
+
+
+@dataclass(frozen=True, slots=True)
+class SweepConfig:
+    """偏压扫描参数。W4 只执行固定步进，`step_V` 即固定步长（§9.2）。"""
+
+    start_V: float = 0.0
+    stop_V: float = 0.3
+    step_V: float = 0.05
+
+    def __post_init__(self) -> None:
+        for name, value in (("start_V", self.start_V), ("stop_V", self.stop_V), ("step_V", self.step_V)):
+            if not isfinite(value):
+                raise ValueError(f"sweep.{name} must be finite")
+        if self.step_V <= 0.0:
+            raise ValueError("sweep.step_V must be > 0")
+        if self.stop_V < self.start_V:
+            raise ValueError("sweep.stop_V must be >= sweep.start_V")
+
+    def biases(self) -> tuple[float, ...]:
+        """含首末点的等差偏压表，用整数计数避免十进制定点步长的舍入漏点。"""
+        count = int((self.stop_V - self.start_V) / self.step_V + 1e-9)
+        values = [self.start_V + k * self.step_V for k in range(count + 1)]
+        if values[-1] < self.stop_V and not isclose(values[-1], self.stop_V, rel_tol=1e-12, abs_tol=1e-15):
+            values.append(self.stop_V)
+        return tuple(round(value, 12) for value in values)
+
+
+@dataclass(frozen=True, slots=True)
+class OutputConfig:
+    """输出目录与文件单位制；`unit_system` 只影响 writer（§12.1）。"""
+
+    directory: str = "runs/pn_example"
+    unit_system: str = "cm"
+
+    def __post_init__(self) -> None:
+        if not self.directory or not str(self.directory).strip():
+            raise ValueError("output.directory must be a non-empty path")
+        if self.unit_system not in UNIT_SYSTEMS:
+            raise ValueError(f"output.unit_system must be one of {UNIT_SYSTEMS}, got {self.unit_system!r}")
+
+
+@dataclass(frozen=True, slots=True)
 class DeviceConfig:
     """一个器件的配置，字段都是 cm 工程单位。"""
 
@@ -101,6 +171,10 @@ class DeviceConfig:
     device_type: str = DEVICE_PN
     orientation: str = ORIENTATION_P_LEFT_N_RIGHT
     right_voltage_V: float = 0.0
+    input_unit_system: str = "cm"
+    solver: SolverConfig = field(default_factory=SolverConfig)
+    sweep: SweepConfig = field(default_factory=SweepConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
 
     def __post_init__(self) -> None:
         if not isfinite(self.length_cm) or self.length_cm <= 0.0:
@@ -112,6 +186,10 @@ class DeviceConfig:
         # 右端是 0 V 参考（第 4.2 节）；偏压只由左端给出，不允许两端同时加偏压。
         if not isfinite(self.right_voltage_V) or self.right_voltage_V != 0.0:
             raise ValueError("right terminal must be grounded at exactly 0 V")
+        if self.input_unit_system not in UNIT_SYSTEMS:
+            raise ValueError(
+                f"input_unit_system must be one of {UNIT_SYSTEMS}, got {self.input_unit_system!r}"
+            )
         if self.device_type not in (DEVICE_PN, DEVICE_GENERIC_1D):
             raise ValueError(f"unknown device type: {self.device_type!r}")
         if self.device_type == DEVICE_PN:
