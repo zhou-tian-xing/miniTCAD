@@ -3,7 +3,11 @@
 `solve_single_bias` 是 `sweep` 与 `run` 的唯一调用点：把求解器设置、初值校验和计时
 收在一处，保证 GUI/CLI 走同一条路径（§10.2）。
 
-失败语义：求解失败时 `SolveResult.state is None`（A 的实现保证），本层不抛异常，
+**方法选择**：只按 `solver.method` 选入口，两种方法的其余参数逐个透传。这里刻意不做
+“Newton 失败就退回 Gummel”的兜底——那样结果里的 `solver` 标签会与实际执行的方法不符，
+Gate 2 的对照实验也会把两条路径混在一起。失败就是失败，由 `sweep` 决定回滚。
+
+失败语义：求解失败时 `SolveResult.state is None`（求解器保证），本层不抛异常，
 由 `sweep` 决定停止还是回滚；只有**参数非法**才抛 `ValueError`。
 """
 
@@ -13,7 +17,9 @@ from time import perf_counter
 
 from minitcad.core.device import NormalizedDevice, SolverConfig
 from minitcad.core.state import SolveResult, State
-from minitcad.solvers import solve_gummel
+from minitcad.solvers import solve_gummel, solve_newton
+
+_SOLVERS = {"gummel": solve_gummel, "newton": solve_newton}
 
 
 def solve_single_bias(
@@ -24,13 +30,15 @@ def solve_single_bias(
 ) -> tuple[SolveResult, float]:
     """解一个偏压点，返回 `(结果, 墙钟时间[s])`。
 
-    `solver.method == "newton"` 时直接拒绝：A 的 Newton 在 W5 落地，
-    悄悄退回 Gummel 会让结果里的方法标签与实际不符。
+    `solver.method` 必须是 `SOLVER_METHODS` 之一；配置层已经校验过，这里的失败是
+    “有人绕过配置直接构造 `SolverConfig`”，属于编程错误，用 `ValueError` 明确暴露。
     """
-    if solver.method == "newton":
-        raise NotImplementedError("solve_newton lands in W5 (A); use solver.method='gummel'")
+    try:
+        solve = _SOLVERS[solver.method]
+    except KeyError as exc:
+        raise ValueError(f"unknown solver method: {solver.method!r}") from exc
     started = perf_counter()
-    result = solve_gummel(
+    result = solve(
         device,
         bias_V,
         initial_state,

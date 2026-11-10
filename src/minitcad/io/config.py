@@ -246,26 +246,41 @@ def _parse_solver(block: object) -> SolverConfig:
 
 
 def _parse_sweep(block: object) -> SweepConfig:
-    """`sweep` 块。W4 是固定步进：`step_V` 缺省时取 `initial_step_V`。
+    """`sweep` 块。`step_V` 缺省时取 `initial_step_V`（两种写法等价，W2 起就接受）。
 
-    `min_step_V/max_step_V/grow_factor/shrink_factor` 属于 W5 的自适应模式，
-    这里接受但暂不使用，避免以后改 YAML schema（§9.2）。
+    `adaptive` 打开 W5 的自适应继续法；`min_step_V/max_step_V/grow_factor/shrink_factor`
+    只在自适应模式下起作用，但**始终解析并校验**——留着不校验的话，一个写错的自适应参数
+    会在固定步进模式下静默通过，等切换模式时才炸。
     """
     if block is None:
         return SweepConfig()
     if not isinstance(block, dict):
         raise UnitError("sweep must be a mapping")
     allowed = {"start_V", "stop_V", "step_V", "initial_step_V", "min_step_V",
-               "max_step_V", "grow_factor", "shrink_factor"}
+               "max_step_V", "grow_factor", "shrink_factor", "adaptive"}
     unknown = sorted(set(block) - allowed)
     if unknown:
         raise UnitError(f"sweep: unknown field(s) {unknown}")
     step = block.get("step_V", block.get("initial_step_V", 0.05))
-    return SweepConfig(
-        start_V=_float(block.get("start_V", 0.0), "sweep.start_V"),
-        stop_V=_float(block.get("stop_V", 0.3), "sweep.stop_V"),
-        step_V=_float(step, "sweep.step_V"),
-    )
+    defaults = SweepConfig()
+    adaptive = block.get("adaptive", False)
+    if not isinstance(adaptive, bool):
+        raise UnitError("sweep.adaptive must be a boolean")
+    try:
+        return SweepConfig(
+            start_V=_float(block.get("start_V", 0.0), "sweep.start_V"),
+            stop_V=_float(block.get("stop_V", 0.3), "sweep.stop_V"),
+            step_V=_float(step, "sweep.step_V"),
+            adaptive=adaptive,
+            min_step_V=_float(block.get("min_step_V", defaults.min_step_V), "sweep.min_step_V"),
+            max_step_V=_float(block.get("max_step_V", defaults.max_step_V), "sweep.max_step_V"),
+            grow_factor=_float(block.get("grow_factor", defaults.grow_factor), "sweep.grow_factor"),
+            shrink_factor=_float(
+                block.get("shrink_factor", defaults.shrink_factor), "sweep.shrink_factor"
+            ),
+        )
+    except ValueError as exc:
+        raise UnitError(f"sweep: {exc}") from exc
 
 
 def _parse_output(block: object) -> OutputConfig:

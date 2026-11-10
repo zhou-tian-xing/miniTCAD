@@ -119,20 +119,57 @@ class SolverConfig:
 
 @dataclass(frozen=True, slots=True)
 class SweepConfig:
-    """偏压扫描参数。W4 只执行固定步进，`step_V` 即固定步长（§9.2）。"""
+    """偏压扫描参数（§9.2）。
+
+    两种模式：`adaptive=False` 走 W4 的固定步进，`biases()` 给出完整的等差偏压表；
+    `adaptive=True` 走 W5 的自适应继续法，偏压表由 `simulation/sweep.py` 在运行中生成，
+    `biases()` 在这时只表示“如果一切都成功会走的路径”，不参与实际求解。
+
+    `step_V` 在两种模式下都是**起始步长**：固定步进时它是唯一的步长，自适应时它是第一次
+    尝试的 `Delta V`，之后按 `grow_factor`/`shrink_factor` 变化。
+    """
 
     start_V: float = 0.0
     stop_V: float = 0.3
     step_V: float = 0.05
+    adaptive: bool = False
+    min_step_V: float = 1e-3
+    max_step_V: float = 1e-1
+    grow_factor: float = 1.5
+    shrink_factor: float = 0.5
 
     def __post_init__(self) -> None:
-        for name, value in (("start_V", self.start_V), ("stop_V", self.stop_V), ("step_V", self.step_V)):
+        for name, value in (
+            ("start_V", self.start_V),
+            ("stop_V", self.stop_V),
+            ("step_V", self.step_V),
+            ("min_step_V", self.min_step_V),
+            ("max_step_V", self.max_step_V),
+            ("grow_factor", self.grow_factor),
+            ("shrink_factor", self.shrink_factor),
+        ):
             if not isfinite(value):
                 raise ValueError(f"sweep.{name} must be finite")
         if self.step_V <= 0.0:
             raise ValueError("sweep.step_V must be > 0")
         if self.stop_V < self.start_V:
             raise ValueError("sweep.stop_V must be >= sweep.start_V")
+        if not (0.0 < self.shrink_factor < 1.0):
+            raise ValueError("sweep.shrink_factor must be in (0, 1)")
+        if self.grow_factor <= 1.0:
+            raise ValueError("sweep.grow_factor must be > 1")
+        if self.min_step_V <= 0.0:
+            raise ValueError("sweep.min_step_V must be > 0")
+        if self.max_step_V < self.min_step_V:
+            raise ValueError("sweep.max_step_V must be >= sweep.min_step_V")
+        # 起始步长必须落在自适应区间内，否则第一次收缩/放大就会被夹回边界，
+        # 用户写的 `step_V` 与实际执行的步长不一致。固定步进没有这个语义，
+        # 只在自适应模式下检查——否则一个合法的固定大步骤配置会被无关参数拒绝。
+        if self.adaptive and not (self.min_step_V <= self.step_V <= self.max_step_V):
+            raise ValueError(
+                f"sweep.step_V must be within [{self.min_step_V}, {self.max_step_V}] "
+                "when sweep.adaptive is true"
+            )
 
     def biases(self) -> tuple[float, ...]:
         """含首末点的等差偏压表，用整数计数避免十进制定点步长的舍入漏点。"""

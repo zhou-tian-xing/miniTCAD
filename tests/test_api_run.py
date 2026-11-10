@@ -1,7 +1,7 @@
 """W4-B3/B4：`api.run()` 的公开语义（§10.2）。
 
 覆盖：正常接受、协作式取消、失败原因、`progress` 只报已尝试偏压、
-以及 `newton` 未落地时必须显式拒绝。
+以及 W5 起 `newton` 走同一条流水线。
 """
 
 from __future__ import annotations
@@ -15,7 +15,9 @@ from minitcad.api import run, write_required_outputs
 from minitcad.core.device import OutputConfig
 from minitcad.io.config import config_fingerprint, load_config
 
-BASELINE = pathlib.Path(__file__).resolve().parents[1] / "examples" / "pn_baseline_0_to_030.yaml"
+_EXAMPLES = pathlib.Path(__file__).resolve().parents[1] / "examples"
+BASELINE = _EXAMPLES / "pn_baseline_0_to_030.yaml"
+NEWTON_BASELINE = _EXAMPLES / "pn_newton_adaptive_0_to_030.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -74,10 +76,23 @@ def test_failure_is_reported_with_bias_and_reason(config):
     assert result.attempts[-1].status == "FAIL"
 
 
-def test_newton_is_not_wired_yet(config):
-    newton = dataclasses.replace(config, solver=dataclasses.replace(config.solver, method="newton"))
-    with pytest.raises(NotImplementedError):
-        run(newton)
+def test_newton_runs_through_the_same_pipeline():
+    """W5：`method: newton` 已接入 `run()`；同一器件用自适应 + Newton 走到 0.30 V。
+
+    固定 0.05 V 步长下 Newton 会在 0.10 V 失败（见 `reports/week05_acceptance.md`），
+    因此这里用 `examples/pn_newton_adaptive_0_to_030.yaml`。判决只看到没到终点：
+    中途回滚的失败尝试留在 `attempts` 里，但整体仍可以是 ACCEPTED。
+    """
+    newton = load_config(NEWTON_BASELINE)
+    assert newton.solver.method == "newton"
+    result = run(newton)
+    assert result.config.solver.method == "newton"
+    assert result.accepted, result.failure_reason
+    assert result.attempts[-1].bias_V == pytest.approx(0.3)
+    assert result.attempts[-1].status == "PASS"
+    # 自适应路径上出现过回滚：失败记录必须留着，不能被“最后成功了”抹掉。
+    assert any(attempt.status == "FAIL" for attempt in result.attempts)
+    assert len(result.successful) < len(result.attempts)
 
 
 def test_writer_requires_overwrite_for_existing_files(config, tmp_path):

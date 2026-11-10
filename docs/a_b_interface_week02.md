@@ -8,6 +8,10 @@
 > **2026-11-04 W4**：`solvers/` 并入根包（`gummel.py`、`convergence.py`），
 > `C2_v1` 的 4 个旧签名测试已修好、`solvers/convergence.py` 补全，`RunResult` 增加
 > `run_id/config_sha256`；`run()`/`write_required_outputs()` 与三文件 writer 初版落地。
+> **2026-11-10 W5**：同步 A 的 `e6c8a5f`（Newton + 反向扫压），`solvers/{jacobian,newton}.py`
+> 并入根包并与 A 的实现逐位一致；`Attempt` 增加 `note`、`SweepConfig` 增加自适应五项；
+> `convergence.py` 抽出 `residual_scales_qf`、`scaled_update` 改名 `scaled_update_physical`
+> （旧名保留）。**CSV 的 22 列未变。**
 > **依据**：`目的与规划.md` §14.7、§10.3；A 的 `C2_v1/src/minitcad/discretization/residual.py`
 > 头注释与 `C2_v1/tests/test_qf_state.py`、`test_qf_stability.py`。
 > **Owner**：B 维护本表，A 校核。
@@ -16,11 +20,11 @@
 
 | 项 | 值 |
 |---|---|
-| 接口版本 | `w2-w4/qf-v1`（在 2026-10-18 冻结版上增加 QF 内部表示与 W4 运行入口；不改已冻结字段名） |
-| 批准人 A / B | 待签 / B（2026-10-25 复核 `b195ce5`；2026-11-03 加固复核） |
-| 变更日期 | 2026-10-25（初版）、2026-11-03（加固）、2026-11-04（W4 运行入口） |
-| 对应 git commit | A：`b195ce5`；B：`98ff013`、`be4a1ee`+ 加固与 W4 提交（根 `src/minitcad`） |
-| 配套契约文件 | `docs/numerical_conventions.md`（单位/符号/容差/非法状态）、`docs/convergence_template.md`（§12.3） |
+| 接口版本 | `w5/qf-newton-v1`（在 `w2-w4/qf-v1` 上增加 Newton 入口与自适应扫压参数；不改已冻结字段名，`Attempt` 只在末尾追加 `note`） |
+| 批准人 A / B | 待签 / B（2026-10-25 复核 `b195ce5`；2026-11-03 加固复核；2026-11-10 W5 复核 `e6c8a5f`） |
+| 变更日期 | 2026-10-25（初版）、2026-11-03（加固）、2026-11-04（W4 运行入口）、2026-11-10（W5 Newton） |
+| 对应 git commit | A：`b195ce5`、`e6c8a5f`；B：`98ff013`、`be4a1ee` + W4/W5 提交（根 `src/minitcad`） |
+| 配套契约文件 | `docs/numerical_conventions.md`（单位/符号/容差/非法状态）、`docs/convergence_template.md`（§12.3）、`docs/numerics_gummel.md`、`docs/numerics_newton.md` |
 
 ## 2. 会审项（QF 版）
 
@@ -62,8 +66,13 @@
 | `RunResult` / CLI / 22 列 CSV schema | `src/minitcad/simulation/run_result.py`、`cli.py`、`io/results_csv.py` | `tests/test_run_result.py`、`test_cli.py`、`test_results_csv.py` |
 | 公共 API 冻结（包级 `__all__`、函数参数名、dataclass 字段、CSV 列序） | `src/minitcad/core/__init__.py`、`io/__init__.py`、`discretization/__init__.py` | `tests/test_public_api.py`（9 项） |
 | **运行入口** | `run(config, progress, should_stop) -> RunResult`、`write_required_outputs(run, path, overwrite) -> (csv, png, md)` | `src/minitcad/api.py`、`simulation/{dc,sweep,diagnostics}.py` | `tests/test_api_run.py`、`test_week04_gate1.py` |
-| **求解器接口** | `solve_gummel(device, bias_V, initial_state, *, tol_residual, tol_update, max_iter, alpha_min, n_floor, diagnostics)`；收敛判据 `scaled_residual_qf`/`scaled_update`/`is_converged` | `src/minitcad/solvers/` | `tests/test_week04_gate1.py`、`C2_v1/tests/test_qf_stability.py` |
+| **求解器接口** | `solve_gummel(device, bias_V, initial_state, *, tol_residual, tol_update, max_iter, alpha_min, n_floor, diagnostics)`；收敛判据 `scaled_residual_qf`/`residual_scales_qf`/`scaled_update_physical`/`is_converged`（`scaled_update` 是旧名薄封装，保留） | `src/minitcad/solvers/` | `tests/test_week04_gate1.py`、`C2_v1/tests/test_qf_stability.py` |
 | **三文件 writer（初版）** | `comparison.csv` 22 列、`comparison.png` 6 面板、`convergence.md` 十节；`run_id`/`config_sha256` 三者一致 | `io/results_csv.py`、`io/plot.py`、`io/report.py` | `tests/test_io_writer.py`（11 项） |
+| **Newton 求解器** | `solve_newton(device, bias_V, initial_state, *, tol_residual, tol_update, max_iter, alpha_min, n_floor, diagnostics)`；与 `solve_gummel` 逐参数同名同默认值 | `src/minitcad/solvers/newton.py` | `tests/test_newton_adapter.py`（14 项） |
+| **Jacobian** | `jacobian_qf(state, device, bias_V, *, rel_step=1e-5) -> csc_matrix`，九色稀疏中心差分，`(3M,3M)` | `src/minitcad/solvers/jacobian.py` | `tests/test_t10_jacobian.py`（7 项） |
+| **自适应扫压** | `run_adaptive_sweep(device, sweep, initial_state, solver, *, progress, should_stop, solve)`；`SweepOutcome` 增加 `successful`/`reached_V` | `src/minitcad/simulation/sweep.py` | `tests/test_t13_rollback.py`（5 项） |
+| **扫描层说明字段** | `Attempt.note: str \| None`（回滚原因），与 `result.reason`（求解器原因）分工，合并写入 CSV 的 `notes` 列 | `src/minitcad/simulation/run_result.py`、`io/results_csv.py` | `tests/test_public_api.py`、`test_cancel_contract.py` |
+| **自适应扫压参数** | `SweepConfig.adaptive/min_step_V/max_step_V/grow_factor/shrink_factor`，YAML `sweep` 块同名 | `src/minitcad/core/device.py`、`io/config.py` | `tests/test_io_config.py` |
 
 ## 4. QF 重构对 W2/W3 的影响（B 的处理）
 
@@ -94,13 +103,10 @@
    `tests/test_oracle_qf_residual.py::test_internal_rows_are_invariant_to_the_qf_reference_shift`
    已证明残差对该选择不变，因此混合锚定不影响结果；**签名必须保留 `ref_n/ref_p`**，
    且一次求解内不得改变（`_interpolate_qf` 会显式检查）。
-2. **`C2_v1` 遗留重复定义**：`C2_v1/.../solvers/gummel.py` 同时存在旧
-   `solve_gummel`（约 419 行）与 QF 版（约 567 行），后者覆盖前者；
-   合并到根包 W4 时必须只保留 QF 版。本次未把 `solvers/` 并入根包（属 W4）。
-3. **A 的测试与实现不一致**：`C2_v1/tests/test_qf_stability.py` 仍按旧签名调用
-   `residual_qf(device, bias, u, eta_n, eta_p, ref_n=..., ref_p=...)` 并期望三元组；
-   当前 `residual_qf(QFState, device, bias)` 返回 `ndarray`。`C2_v1` 实测
-   `4 failed, 164 passed`，需 A 更新测试或恢复兼容层。
+2. ~~**`C2_v1` 遗留重复定义**~~ **已解决（W4）**：`C2_v1/.../solvers/gummel.py` 里被三引号
+   注释掉的旧版 `solve_gummel`（约 419 行）已删除，只保留 QF 版；数值逐位未变。
+3. ~~**A 的测试与实现不一致**~~ **已解决（W4）**：`C2_v1/tests/test_qf_stability.py` 的
+   4 个失败用例已改用 `QFState` + `evaluate_qf`；`C2_v1` 现为 `215 passed`。
 4. **归一化模块分叉**：`C2_v1/.../physics/normalization.py` 把 `e0_v_per_cm`
    改名为 `e0_v_cm`、删除 `qr0_a_cm3`、增加 `normalize_cm/denormalize_cm`；
    根包仍用 B 的 W1 版本。需确认哪一版是 A 的正式交付（根包 W2 测试当前依赖 B 版）。
@@ -110,9 +116,23 @@
 6. **`device/mesh` 的 A 版校验增强**（`area_cm2` 可空、右端必须 0 V、
    `segmented` 必须含结区断点）：根包尚未合并；需 A 确认是否作为正式契约，
    其中“右端 0 V”与 `contact_targets` 的右端参考一致，建议 W4 前合并。
+7. **（W5 新增）Newton 的继续法边界**：`ΔV > 0.02 V` 时 Newton 在 0.10–0.15 V 会
+   `LINE_SEARCH_FAILED`。B 已用自适应回滚兜住（0.03–0.07 V 起点都能到 0.30 V），
+   但根因在**接触投影**：一次把左端 `η_n` 抬 `Δv`、内部结点仍是旧值，第一条边被算成
+   `1e12` 量级的虚假空穴通量，该行尺度随之上浮、merit 失去分辨力。
+   请 A 评估两条修法：(a) 投影后对内部结点做一次线性外推整流；(b) 线搜索 merit 改用
+   求解开始时冻结的尺度（B 实测 (b) 单独使用无效）。详见 `reports/week05_acceptance.md` §8。
+8. **（W5 新增）A 的 `reverse_sweep.py` 未并入根包**：`C2_v1/src/minitcad/simulation/reverse_sweep.py`
+   （`solve_reverse_sweep`、`ReversePoint`、`ReverseSweep`）属于 A 的 W5 反向扫压探索，
+   根包的 `run()` 仍只按正向偏压表走。若 W6 要覆盖反向偏压，需要先定义它的
+   `RunResult` 映射（当前 `Attempt` 语义是“正向扫压的一次尝试”），再并入。
+9. **（W5 新增）`Attempt.note` 是 dataclass 末尾追加的字段**：位置参数调用
+   `Attempt(bias_V, status, runtime_s, result)` 不受影响，但字段表变长，
+   已同步 `tests/test_public_api.py::test_run_result_contract` 与 §3 的表格。
 
 ## 6. 签字
 
-A：**待签**（请确认 §5 的 1–6 项，尤其是 `ref_n/ref_p` 与 `C2_v1` 遗留定义）
+A：**待签**（请确认 §5 的 1、4–9 项，尤其是 Newton 的继续法边界与 `reverse_sweep.py` 的归口）
 
-B：**已签**（2026-10-25 复核 commit `b195ce5`；2026-11-03 加固复核 + 公共 API 冻结，根包 `pytest -q` = 262 passed）
+B：**已签**（2026-10-25 复核 commit `b195ce5`；2026-11-03 加固复核 + 公共 API 冻结；
+2026-11-10 同步 `e6c8a5f`，根包 `pytest -q` = 332 passed，`C2_v1` = 215 passed）

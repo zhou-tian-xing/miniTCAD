@@ -2,7 +2,10 @@
 
 `solve` 与 GUI 走同一个 `api.run()` + `api.write_required_outputs()`，
 因此两端的偏压点、失败原因与三文件内容必然一致。
-退出码：0 = ACCEPTED，2 = REJECTED/配置非法，3 = 求解器未落地（`method: newton`，W5）。
+
+退出码：0 = ACCEPTED，2 = REJECTED/配置非法，3 = 求解器未落地。
+W5 起 `method: newton` 已接线，3 只作为**保留码**：`run()` 若对某个尚未实现的能力
+抛 `NotImplementedError`，CLI 必须报 `NOT_WIRED` 而不是伪装成求解失败（2）。
 """
 
 from __future__ import annotations
@@ -136,7 +139,11 @@ def _solve(args: argparse.Namespace) -> int:
     if result.failure_reason is not None:
         print(f"reason  : {result.failure_reason}")
     print(f"run_id  : {result.run_id}")
-    print(f"accepted: {len(result.successful)} / {len(result.attempts)} bias points")
+    # 自适应模式下 `attempts` 可能包含同一区段的多次尝试（回滚），因此这里说的是
+    # “尝试”而不是“偏压点”：把回滚次数如实暴露出来，别让 9/12 看起来像丢了 3 个偏压。
+    print(f"accepted: {len(result.successful)} of {len(result.attempts)} attempts")
+    if len(result.attempts) != len(result.successful):
+        print(f"rollback: {len(result.attempts) - len(result.successful)} failed attempt(s) kept in comparison.csv")
     for name, written_path in zip(("comparison.csv", "comparison.png", "convergence.md"), written):
         print(f"  wrote {name:16s} {written_path}")
     return EXIT_OK if result.accepted else EXIT_REJECTED

@@ -58,6 +58,7 @@ def test_validate_rejects_broken_config_without_traceback(tmp_path, capsys):
 
 
 BASELINE_YAML = EXAMPLES / "pn_baseline_0_to_030.yaml"
+NEWTON_YAML = EXAMPLES / "pn_newton_adaptive_0_to_030.yaml"
 
 
 def test_solve_writes_the_three_required_files(tmp_path, capsys):
@@ -78,13 +79,17 @@ def test_solve_refuses_to_overwrite_existing_outputs(tmp_path, capsys):
     assert cli.main(["solve", str(BASELINE_YAML), "--out", str(tmp_path), "--overwrite"]) == 0
 
 
-def test_solve_reports_newton_as_not_wired(tmp_path, capsys):
-    """A 的 Newton 在 W5 落地；此时必须明确拒绝，不能悄悄换成 Gummel。"""
-    text = BASELINE_YAML.read_text(encoding="utf-8").replace("method: gummel", "method: newton")
+def test_solve_accepts_newton_with_adaptive_sweep(tmp_path, capsys):
+    """W5：`method: newton` 已接线，CLI 走 `run()` 的同一条路径并写出三文件。"""
     config = tmp_path / "newton.yaml"
-    config.write_text(text, encoding="utf-8")
-    assert cli.main(["solve", str(config), "--out", str(tmp_path / "out")]) == 3
-    assert "NOT_WIRED" in capsys.readouterr().err
+    config.write_text(NEWTON_YAML.read_text(encoding="utf-8"), encoding="utf-8")
+    out = tmp_path / "out"
+    assert cli.main(["solve", str(config), "--out", str(out)]) == 0
+    captured = capsys.readouterr().out
+    assert "decision: ACCEPTED" in captured
+    assert "solver  : newton" in captured
+    for name in ("comparison.csv", "comparison.png", "convergence.md"):
+        assert (out / name).is_file()
 
 
 def test_solve_failure_is_reported_with_bias(tmp_path, capsys):

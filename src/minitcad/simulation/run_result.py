@@ -22,12 +22,17 @@ STATUSES = (STATUS_PASS, STATUS_FAIL, STATUS_CANCELLED)
 
 @dataclass(frozen=True, slots=True)
 class Attempt:
-    """一个已尝试的偏压点。result 为 SolveResult；W4 前可以为 None。"""
+    """一个已尝试的偏压点。result 为 SolveResult；W4 前可以为 None。
+
+    `note` 是**扫描层**的说明（为什么回滚、步长怎么变），与 `result.reason`（求解器
+    为什么失败）分开：`notes` 列同时要能追溯这两类原因，但它们的作者不同（§9.2）。
+    """
 
     bias_V: float
     status: str
     runtime_s: float = 0.0
     result: object | None = None
+    note: str | None = None
 
     def __post_init__(self) -> None:
         if not isfinite(self.bias_V):
@@ -36,6 +41,8 @@ class Attempt:
             raise ValueError(f"status must be one of {STATUSES}, got {self.status!r}")
         if not isfinite(self.runtime_s) or self.runtime_s < 0.0:
             raise ValueError("runtime_s must be finite and >= 0")
+        if self.note is not None and not isinstance(self.note, str):
+            raise ValueError("note must be a string or None")
 
 
 @dataclass(frozen=True, slots=True)

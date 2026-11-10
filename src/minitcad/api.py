@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pathlib
 from datetime import datetime
+from math import isclose
 from typing import Callable
 from uuid import uuid4
 
@@ -50,26 +51,41 @@ def run(
 
     0 V 平衡解由 A 的标量 Poisson 提供，作为第一个偏压的热启动；若配置的起点不是 0 V，
     它仍作为初值，由第一个外层迭代带到目标偏压。
-    任一偏压失败即停止：`decision=REJECTED`，`failure_reason` 记录偏压、状态与求解器原因。
+
+    判决只看**最终是否到达 `stop_V`**：固定步进下这等价于“每个偏压都通过”，自适应下
+    允许中途回滚，但回滚的失败尝试仍留在 `attempts` 里（`§11.3` 不允许把失败掩盖成成功）。
+    未到达则 `decision=REJECTED`，`failure_reason` 记录最后一个失败偏压与求解器的原因。
     """
     from minitcad.core.device import build_device
+    from minitcad.simulation.sweep import run_adaptive_sweep
 
     device = build_device(config)
     initial = equilibrium_start_state(device)
-    outcome = run_fixed_sweep(
-        device,
-        config.sweep.biases(),
-        initial,
-        config.solver,
-        progress=progress,
-        should_stop=should_stop,
-    )
+    if config.sweep.adaptive:
+        outcome = run_adaptive_sweep(
+            device,
+            config.sweep,
+            initial,
+            config.solver,
+            progress=progress,
+            should_stop=should_stop,
+        )
+    else:
+        outcome = run_fixed_sweep(
+            device,
+            config.sweep.biases(),
+            initial,
+            config.solver,
+            progress=progress,
+            should_stop=should_stop,
+        )
 
     attempts = outcome.attempts
     successful = tuple(attempt for attempt in attempts if attempt.status == STATUS_PASS)
+    reached = outcome.reached_V
     if outcome.cancelled:
         decision, reason = DECISION_REJECTED, "CANCELLED"
-    elif attempts and len(successful) == len(attempts):
+    elif reached is not None and isclose(reached, config.sweep.stop_V, rel_tol=0.0, abs_tol=1e-12):
         decision, reason = DECISION_ACCEPTED, None
     else:
         decision = DECISION_REJECTED
@@ -78,7 +94,8 @@ def run(
         else:
             last = attempts[-1]
             detail = last.result.reason if last.result is not None else "NO_RESULT"
-            reason = f"{last.status} at {last.bias_V:.6g} V: {detail}"
+            rollback = f"; {last.note}" if last.note else ""
+            reason = f"{last.status} at {last.bias_V:.6g} V: {detail}{rollback}"
 
     return RunResult(
         config=config,

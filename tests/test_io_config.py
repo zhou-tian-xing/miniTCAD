@@ -144,3 +144,44 @@ def test_segmented_yaml_without_the_junction_is_rejected():
     with pytest.raises(ValueError) as excinfo:
         build_device(parse_config_dict(data))
     assert "junction" in str(excinfo.value)
+
+
+def test_adaptive_sweep_block_is_parsed_and_validated():
+    """W5：`sweep.adaptive` 与四个自适应参数必须真的进入 `SweepConfig`。
+
+    W4 时这些键被“接受但忽略”，一个写错的自适应配置会静默通过；现在它们必须生效。
+    """
+    data = _minimal()
+    data["sweep"] = {
+        "start_V": 0.0,
+        "stop_V": 0.3,
+        "step_V": 0.05,
+        "adaptive": True,
+        "min_step_V": 5.0e-4,
+        "max_step_V": 0.08,
+        "grow_factor": 2.0,
+        "shrink_factor": 0.25,
+    }
+    sweep = parse_config_dict(data).sweep
+    assert sweep.adaptive is True
+    assert sweep.min_step_V == pytest.approx(5.0e-4)
+    assert sweep.max_step_V == pytest.approx(0.08)
+    assert sweep.grow_factor == pytest.approx(2.0)
+    assert sweep.shrink_factor == pytest.approx(0.25)
+
+
+def test_adaptive_sweep_rejects_an_out_of_band_starting_step():
+    """起始步长落在 `[min_step_V, max_step_V]` 之外时，实际步长会与 `step_V` 不符。"""
+    data = _minimal()
+    data["sweep"] = {"step_V": 0.2, "adaptive": True, "max_step_V": 0.1}
+    with pytest.raises(UnitError):
+        parse_config_dict(data)
+
+
+def test_fixed_sweep_allows_a_large_step():
+    """固定步进没有步长区间语义，不应被自适应的默认上限拒绝。"""
+    data = _minimal()
+    data["sweep"] = {"step_V": 0.2, "stop_V": 0.6}
+    config = parse_config_dict(data)
+    assert config.sweep.adaptive is False
+    assert config.sweep.biases()[-1] == pytest.approx(0.6)

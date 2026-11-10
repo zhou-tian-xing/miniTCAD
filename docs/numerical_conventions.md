@@ -148,11 +148,12 @@ QF 精度改写（A 的 `b195ce5`）：SG 用 `expm1(Δη)`、SRH 分子用 `exp
 | 2026-10-25 | 并入 A 的 QF 残差/SG/SRH/平衡初值，新增 `QFState`/`contact_targets_qf`/`PhysicsDiagnostics` | 内部表示变化，公开 API 不变 | `98ff013` |
 | 2026-11-04 | W4：并入 A 的 `solvers/`（Gummel + 收敛判据）、新增 `api.run`/`write_required_outputs` 与三文件 writer 初版；`RunResult` 增加 `run_id/config_sha256`；`devices` 增加 `input_unit_system`、`solver/sweep/output` 配置块 | 新增运行入口与输出契约；已冻结的 Mesh/State/残差字段不变；根包 291 passed、`C2_v1` 168 passed | 本次提交 |
 | 2026-11-03 | 收紧 W2 校验：`segmented` 结区必须落结点、结点数必须整数、`w` 一致性检查、右端必须 0 V、接触浓度越界拒绝；新增 `docs/numerical_conventions.md`、`docs/convergence_template.md` | 仅拒绝此前被静默接受的非法配置；合法配置结果不变（235 → 262 passed，新增 27 项测试：18 项校验/契约 + 9 项公共 API 冻结） | 本次提交 |
+| 2026-11-10 | W5：并入 A 的 `solvers/{jacobian,newton}.py`；`convergence.py` 抽出 `residual_scales_qf`、`scaled_update` → `scaled_update_physical`（旧名保留）；`SweepConfig` 增加自适应五项；`Attempt` 末尾追加 `note`；新增 `verification/fd_jacobian_oracle.py` 与 `docs/numerics_newton.md` | 判据的两种求解器**共用同一个函数**，因此“同一状态在两种方法下收敛性不同”只可能来自方法本身；CSV 22 列未变；根包 332 passed、`C2_v1` 215 passed | 本次提交 |
 
 ## 9. 证据索引
 
 ```bash
-python -m pytest -q                        # 全量（262 passed）
+python -m pytest -q                        # 全量（332 passed）
 python -m pytest tests/test_public_api.py -q   # 公共 API 冻结：__all__、参数名、dataclass 字段、CSV 列序
 python -m pytest tests/test_oracle_bernoulli.py tests/test_oracle_srh.py \
     tests/test_oracle_poisson.py tests/test_oracle_sg.py \

@@ -90,8 +90,10 @@ def test_csv_header_order_is_frozen():
 
 
 def test_run_result_contract():
+    # W5-B2 给 Attempt 加了 `note`（扫描层的回滚说明），与 `result.reason`
+    # （求解器失败原因）分工；字段序是冻结契约，追加只能放在末尾。
     assert [field.name for field in dataclasses.fields(Attempt)] == [
-        "bias_V", "status", "runtime_s", "result",
+        "bias_V", "status", "runtime_s", "result", "note",
     ]
     assert [field.name for field in dataclasses.fields(RunResult)] == [
         "config", "device", "attempts", "successful", "decision", "failure_reason",

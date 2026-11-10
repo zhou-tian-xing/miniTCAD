@@ -1,0 +1,73 @@
+# W5-B2 基准：Newton + 自适应继续法，0 -> 0.30 V。
+# 与 pn_baseline_0_to_030.yaml 是同一器件、同一终点，只换求解器与扫压方式。
+# 固定 0.05 V 步长下 Newton 会在 0.10 V 失败（左接触的虚假边界层通量把线搜索压到 alpha~1e-3），
+# 自适应把失败的一跳拆小后可以一路收敛到 0.30 V，失败尝试仍留在 attempts 与 CSV 的 sweep 行里。
+
+units:
+  system: cm
+
+device:
+  type: pn
+  orientation: p_left_n_right
+  length_cm: 1.0e-3
+  area_cm2: 1.0e-4
+  temperature_K: 300.0
+
+material:
+  name: silicon
+  epsilon_relative: 11.7
+  intrinsic_density_cm3: 1.0e+10
+  mobility_n_cm2_per_Vs: 1350.0
+  mobility_p_cm2_per_Vs: 480.0
+  lifetime_n_s: 1.0e-6
+  lifetime_p_s: 2.0e-6
+  bandgap_eV: 1.12
+
+regions:
+  - start_cm: 0.0
+    end_cm: 2.5e-4
+    material: silicon
+    acceptor_cm3: 1.0e+16
+    donor_cm3: 0.0
+  - start_cm: 2.5e-4
+    end_cm: 1.0e-3
+    material: silicon
+    acceptor_cm3: 0.0
+    donor_cm3: 2.0e+15
+
+mesh:
+  type: uniform
+  nodes: 201
+
+normalization:
+  reference_diffusivity_cm2_s: 10.0
+
+contacts:
+  type: ideal_ohmic
+  left_terminal: p
+  right_terminal: n
+  right_voltage_V: 0.0
+  bias_definition: left_minus_right
+
+solver:
+  method: newton
+  jacobian: sparse_fd
+  tol_residual: 1.0e-8
+  tol_update: 1.0e-6
+  max_iter: 60
+  alpha_min: 1.0e-6
+  positive_scale_floor: 1.0e-15
+
+sweep:
+  start_V: 0.0
+  stop_V: 0.3
+  step_V: 0.05
+  adaptive: true
+  min_step_V: 1.0e-3
+  max_step_V: 1.0e-1
+  grow_factor: 1.5
+  shrink_factor: 0.5
+
+output:
+  directory: runs/pn_newton_adaptive_0_to_030
+  unit_system: cm

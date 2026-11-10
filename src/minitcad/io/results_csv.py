@@ -166,6 +166,17 @@ def read_header(path: str | pathlib.Path) -> tuple[str, ...]:
         return tuple(next(reader, ()))
 
 
+def read_rows(path: str | pathlib.Path) -> list[dict[str, str]]:
+    """按表头把文件读成字典列表，所有值保持字符串。
+
+    只做解析，不做校验：类型/单位/空值规则由 `check_header` 与调用方判断。
+    保留字符串是故意的——验收脚本要能区分「空」和「0」，而 `float("")` 会抛异常、
+    `float("0")` 会把空值悄悄变成 0。
+    """
+    with open(path, "r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
 def check_header(header: Sequence[str]) -> list[str]:
     """对照冻结 schema 检查表头，返回问题列表；空列表表示通过。
 
@@ -290,10 +301,15 @@ def _edge_rows(run, bias_fields, system: str) -> list[dict]:
 
 
 def _sweep_rows(run, attempt, bias_fields, system: str) -> list[dict]:
-    """每个尝试偏压都要有记录；失败点只写状态与原因，物理量留空（§12.1）。"""
+    """每个尝试偏压都要有记录；失败点只写状态与原因，物理量留空（§12.1）。
+
+    `notes` 同时容纳两种来源：`attempt.note`（扫描层的回滚说明，例如步长怎么缩）
+    与 `result.reason`（求解器为什么失败）。两者都要能追溯，且不能互相覆盖。
+    """
     converged = bias_fields is not None
     status = "PASS" if converged else "FAIL"
-    reason = None if converged else (attempt.result.reason if attempt.result else "NO_RESULT")
+    solver_reason = None if converged else (attempt.result.reason if attempt.result else "NO_RESULT")
+    notes = "; ".join(part for part in (attempt.note, solver_reason) if part) or None
     base = dict(
         run_id=run.run_id,
         config_sha256=run.config_sha256,
@@ -305,7 +321,7 @@ def _sweep_rows(run, attempt, bias_fields, system: str) -> list[dict]:
     rows = [
         _blank_row(**base, quantity="applied_voltage_V", unit="V",
                    numeric_value=float(attempt.bias_V), theory_value=float(attempt.bias_V),
-                   theory_kind="exact", theory_abs_error=0.0, theory_rel_error=0.0, notes=reason),
+                   theory_kind="exact", theory_abs_error=0.0, theory_rel_error=0.0, notes=notes),
         _blank_row(**base, quantity="iteration_count", unit="1",
                    numeric_value=float(attempt.result.iterations) if attempt.result else None),
         _blank_row(**base, quantity="runtime_s", unit="s", numeric_value=float(attempt.runtime_s)),

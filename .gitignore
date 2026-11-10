@@ -5,3 +5,5 @@ iv_curve.csv
 .pytest_cache/
 .venv/
 runs/
+# 临时脚本与一次性对比输出（正式版本在 scripts/）
+.tmp/
