@@ -61,7 +61,7 @@ def solve_equilibrium_scalar(
                                                u_left = u_left_nd,u_right = u_right_nd)
         scale = np.empty(m,dtype = np.float64)
         scale[0] = max(1.0,abs(u_left_nd))
-        scale[-1] = max(u_right_nd,1.0)
+        scale[-1] = max(abs(u_right_nd),1.0)
         scale[1:-1] = np.maximum.reduce((np.ones(m - 2),np.abs(c_in),n[1:-1],p[1:-1]))
         rnorm = float(np.max(np.abs(f) / scale))
         if not np.isfinite(rnorm):

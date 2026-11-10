@@ -147,41 +147,42 @@ def edge_flux_qf(
 ):
     #fn = ref_n + eta_n
     #fp = ref_p + eta_p
-    u = np.asarray(u,dtype = np.float64)
-    eta_n = np.asarray(eta_n,dtype = np.float64)
-    eta_p = np.asarray(eta_p,dtype = np.float64)
-    h = np.asarray(h,dtype = np.float64)
-    if (u.ndim != 1 or u.size < 3 or 
-        eta_n.shape != u.shape or eta_p.shape != u.shape or h.shape != (u.size - 1,)):
-        raise ValueError("invalid quasi-Fermi flux shapes")
-    if (not all(np.isfinite(a).all() for a in (u,eta_n,eta_p,h))
-        or np.any(h <= 0)
-        or not np.isfinite([mu_n,mu_p,ref_n,ref_p]).all()
-        or mu_n <= 0 or mu_p <= 0):
-        raise ValueError("invalid quasi-Fermi flux inputs")
-    n = np.exp((u + ref_n) + eta_n)
-    p = np.exp((-u - ref_p) - eta_p)
-    du = np.diff(u)
-    dfn = np.diff(eta_n)
-    dfp = np.diff(eta_p)
-    bp = bernoulli(du)
-    bn = bernoulli(-du)
-    jn = np.empty_like(du)
-    jp = np.empty_like(du)
-    pos_n = (dfn > 0.0)
-    jn[pos_n] = (
-        -(mu_n / h[pos_n]) * n[1:][pos_n] * bp[pos_n] * np.expm1(-dfn[pos_n])
-    )
-    jn[~pos_n] = (
-        (mu_n / h[~pos_n]) * n[:-1][~pos_n] * bn[~pos_n] * np.expm1(dfn[~pos_n])
-    )
-    pos_p =(dfp > 0.0)
-    jp[pos_p] = (
-        -(mu_p / h[pos_p]) * p[:-1][pos_p] * bp[pos_p] * np.expm1(-dfp[pos_p])
-    )
-    jp[~pos_p] = (
-        (mu_p / h[~pos_p]) * p[1:][~pos_p] * bn[~pos_p] * np.expm1(dfp[~pos_p])
-    )
+    with np.errstate(over = "raise",invalid = "raise",divide = "raise"):
+        u = np.asarray(u,dtype = np.float64)
+        eta_n = np.asarray(eta_n,dtype = np.float64)
+        eta_p = np.asarray(eta_p,dtype = np.float64)
+        h = np.asarray(h,dtype = np.float64)
+        if (u.ndim != 1 or u.size < 3 or 
+            eta_n.shape != u.shape or eta_p.shape != u.shape or h.shape != (u.size - 1,)):
+            raise ValueError("invalid quasi-Fermi flux shapes")
+        if (not all(np.isfinite(a).all() for a in (u,eta_n,eta_p,h))
+            or np.any(h <= 0)
+            or not np.isfinite([mu_n,mu_p,ref_n,ref_p]).all()
+            or mu_n <= 0 or mu_p <= 0):
+            raise ValueError("invalid quasi-Fermi flux inputs")
+        n = np.exp((u + ref_n) + eta_n)
+        p = np.exp((-u - ref_p) - eta_p)
+        du = np.diff(u)
+        dfn = np.diff(eta_n)
+        dfp = np.diff(eta_p)
+        bp = bernoulli(du)
+        bn = bernoulli(-du)
+        jn = np.empty_like(du)
+        jp = np.empty_like(du)
+        pos_n = (dfn > 0.0)
+        jn[pos_n] = (
+            -(mu_n / h[pos_n]) * n[1:][pos_n] * bp[pos_n] * np.expm1(-dfn[pos_n])
+        )
+        jn[~pos_n] = (
+            (mu_n / h[~pos_n]) * n[:-1][~pos_n] * bn[~pos_n] * np.expm1(dfn[~pos_n])
+        )
+        pos_p =(dfp > 0.0)
+        jp[pos_p] = (
+            -(mu_p / h[pos_p]) * p[:-1][pos_p] * bp[pos_p] * np.expm1(-dfp[pos_p])
+        )
+        jp[~pos_p] = (
+            (mu_p / h[~pos_p]) * p[1:][~pos_p] * bn[~pos_p] * np.expm1(dfp[~pos_p])
+        )
     return Fluxes(
         jn_edges = jn,
         jp_edges = jp
