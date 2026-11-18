@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
-iv_curve.csv
 目的与规划.md
 .pytest_cache/
 .venv/

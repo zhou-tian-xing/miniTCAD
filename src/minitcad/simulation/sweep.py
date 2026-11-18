@@ -1,23 +1,16 @@
-"""偏压扫描：固定步进（W4）与自适应继续法 + 回滚（W5-B2，§9.2）。
+"""偏压扫描：固定步进与自适应继续法 + 回滚（§9.2）。
 
-两种模式的失败语义不同，这是本节最重要的一件事：
+两种模式的失败语义不同：
 
-* **固定步进**（`run_fixed_sweep`）：失败即停。下一个偏压仍用最后一个已收敛解热启动，
-  不猜测中间状态。`RunResult.successful` 里永远是可以交给 writer 的真实解，未尝试的偏压
-  不会出现在 `attempts` 中（§11.3 不允许把失败掩盖成成功）。
-* **自适应**（`run_adaptive_sweep`）：失败就把步长减半，从一个**更近的**偏压重新逼近。
-  失败的那一次仍然写入 `attempts` 并标 `FAIL`——回滚不等于失败没发生。
+* 固定步进（`run_fixed_sweep`）：失败即停，下一个偏压仍用最后一个已收敛解热启动。
+* 自适应（`run_adaptive_sweep`）：失败就减小步长，从最后一个已接受解重新逼近；
+  失败的那一次仍写入 `attempts` 并标 `FAIL`。
 
-**“重试同一个目标偏压”的正确读法**：求解器是确定性的，用同样的阶跃从同一个状态重试
-只会得到同样的失败，所以“缩小步长后重试同一目标”必然被理解成：**总体目标（`stop_V`）
-不变，把失败的这一跳拆成几个更小的跳**。因此回滚后下一次尝试的偏压是
-`last_accepted + new_step`，而不是那个刚失败的偏压。
+“重试同一个目标偏压”只能理解为：总体目标 `stop_V` 不变，把失败的一跳拆成更小的跳。
+求解器是确定性的，用同样的阶跃从同一个状态重试必然再失败。
 
-**为什么需要它**（不是可选的健壮性装饰）：Newton 在 0.05 V 的固定步长下会在 0.10 V
-`LINE_SEARCH_FAILED`——从 0.05 V 的解直接跳到 0.10 V 会在左接触形成 `1e12` 量级的虚假
-边界层通量，线搜索只能把 `alpha` 压到 `1e-3` 量级，60 次迭代也走不出这一层。把步长降到
-0.02 V 以内，同一个 Newton 能一路收敛到 0.30 V（见 `reports/week05_acceptance.md`）。
-步长自适应是把“求解器能力”和“继续法步长”这两件事解耦的标准做法。
+为什么需要它：Newton 在固定 0.05 V 步长下会在 0.10 V 失败，把步长降到 0.02 V 以内就能
+一路收敛到 0.30 V（`reports/week05_acceptance.md` §4.1）。
 """
 
 from __future__ import annotations
@@ -39,8 +32,7 @@ Solve = Callable[[NormalizedDevice, float, State, SolverConfig], tuple[SolveResu
 class SweepOutcome:
     """扫描结果：`attempts` 按尝试顺序，`cancelled` 表示被 `should_stop` 中断。
 
-    `attempts` 可能包含**同一个偏压的多次尝试**（自适应回滚），因此它不是偏压表；
-    要取“最终每个偏压的结论”，用 `successful` 或按 `status` 过滤。
+    自适应回滚会让 `attempts` 里出现同一段偏压的多次尝试，所以它不是偏压表。
     """
 
     attempts: tuple[Attempt, ...]
@@ -76,8 +68,7 @@ def run_fixed_sweep(
 ) -> SweepOutcome:
     """按给定偏压表逐点求解；第一个失败点后停止。
 
-    `progress(bias_V, status)` 只在**尝试之后**回调，`status` 取 `PASS`/`FAIL`，
-    调用方不能把它当成完成百分比（§10.2）。
+    `progress(bias_V, status)` 在每次尝试之后回调，`status` 只有 `PASS`/`FAIL`。
     """
     stop = should_stop or (lambda: False)
     attempts: list[Attempt] = []
@@ -112,18 +103,13 @@ def run_adaptive_sweep(
 ) -> SweepOutcome:
     """自适应步长 + 回滚地走到 `sweep.stop_V`。
 
-    步长状态机：
+    * 成功：`step = min(step * grow_factor, max_step_V)`，下一个目标 `= 已接受偏压 + step`；
+    * 失败：记 `FAIL`，`step = max(step * shrink_factor, min_step_V)`，从已接受解重试；
+    * 步长已经贴着 `min_step_V` 仍失败：返回，由 `run()` 判 `REJECTED`。
 
-    * 成功：`step = min(step * grow_factor, max_step_V)`，下一个偏压 `= 已接受偏压 + step`；
-    * 失败：记 `FAIL` 并回滚到最后一个已接受解，`step = max(step * shrink_factor, min_step_V)`，
-      下一次尝试`= 已接受偏压 + 新 step`（即把一个失败的大跳拆成若干小跳）；
-    * 缩到 `min_step_V` 仍失败：无法再缩小，返回（`run()` 据此判 `REJECTED`）。
+    乘性而非加性：`eta` 随偏压线性增长、通量随 `exp` 增长，收敛半径是指数级的。
 
-    **为什么用乘性而不是加性步长**：收敛半径随偏压变化是指数级的（`eta` 随 `V/V_T` 线性
-    增长，通量随 `exp` 增长），加性步长要么在高偏压处太大、要么在低偏压处浪费一半的步数。
-
-    `solve` 可注入，供 T13 的故障注入使用：注入点必须能伪造一次求解失败，而不必真的
-    构造一个不收敛的偏压。生产路径上它就是 `solve_single_bias`。
+    `solve` 可注入，供 T13 伪造一次求解失败；生产路径上是 `solve_single_bias`。
     """
     stop = should_stop or (lambda: False)
     attempts: list[Attempt] = []
@@ -131,8 +117,7 @@ def run_adaptive_sweep(
     step = sweep.step_V
     accepted_V = sweep.start_V
 
-    # 起点本身也是一次尝试：它通常是 0 V 平衡解，一次迭代就通过，
-    # 但必须在 `attempts` 里留痕，否则 CSV 的 sweep 行会缺第一个偏压（§12.1）。
+    # 起点也是一次尝试：通常是 0 V 平衡解，但要在 attempts 里留痕，否则 CSV 缺第一个偏压。
     result, runtime = solve(device, accepted_V, state, solver)
     status = STATUS_PASS if result.converged else STATUS_FAIL
     attempts.append(
@@ -148,8 +133,7 @@ def run_adaptive_sweep(
         if stop():
             return SweepOutcome(attempts=tuple(attempts), cancelled=True)
 
-        # 取 12 位小数与 `SweepConfig.biases()` 同一口径：否则反复 `accepted + step`
-        # 会在 CSV/报告里留下 `0.08750000000000001` 这种由二进制加法累积出来的偏差。
+        # 取 12 位小数，与 `SweepConfig.biases()` 同口径，避免累积出 0.08750000000000001。
         target_V = round(min(accepted_V + step, sweep.stop_V), 12)
         result, runtime = solve(device, target_V, state, solver)
         if result.converged:
@@ -180,7 +164,7 @@ def run_adaptive_sweep(
 
         shrunk = max(step * sweep.shrink_factor, sweep.min_step_V)
         if shrunk >= step:
-            # 已经贴着 min_step_V：再缩也还是这一步，重试只会重复同一个失败。
+            # 贴着 min_step_V 了：再缩是同一个步长，重试只会重复失败。
             return SweepOutcome(attempts=tuple(attempts), cancelled=False)
         step = shrunk
 
@@ -188,10 +172,10 @@ def run_adaptive_sweep(
 
 
 def equilibrium_start_state(device: NormalizedDevice) -> State:
-    """0 V 平衡初值（A 的标量 Poisson 解），给扫描第一个偏压做热启动。
+    """0 V 平衡初值（A 的标量 Poisson 解），给第一个偏压做热启动。
 
-    该标量方程假设 `np = 1`，只在 0 V 成立；扫描起点不是 0 V 时仍用它做初值，
-    由第一个外层迭代把状态带到目标偏压，这比用中性猜测更接近解。
+    该标量方程假设 `np = 1`，只在 0 V 成立；起点不是 0 V 时仍拿它当初值，
+    由第一个外层迭代带到目标偏压，比中性猜测更接近解。
     """
     from minitcad.simulation.equilibrium import solve_equilibrium_scalar
 

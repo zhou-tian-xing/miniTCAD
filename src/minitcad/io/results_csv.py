@@ -167,11 +167,10 @@ def read_header(path: str | pathlib.Path) -> tuple[str, ...]:
 
 
 def read_rows(path: str | pathlib.Path) -> list[dict[str, str]]:
-    """按表头把文件读成字典列表，所有值保持字符串。
+    """按表头读成字典列表，值保持字符串。
 
-    只做解析，不做校验：类型/单位/空值规则由 `check_header` 与调用方判断。
-    保留字符串是故意的——验收脚本要能区分「空」和「0」，而 `float("")` 会抛异常、
-    `float("0")` 会把空值悄悄变成 0。
+    不转成 float：验收时要能区分“空”和“0”，而 `float("")` 会抛异常、
+    `float("0")` 会把空值悄悄变成 0。只解析，不校验。
     """
     with open(path, "r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
@@ -303,8 +302,8 @@ def _edge_rows(run, bias_fields, system: str) -> list[dict]:
 def _sweep_rows(run, attempt, bias_fields, system: str) -> list[dict]:
     """每个尝试偏压都要有记录；失败点只写状态与原因，物理量留空（§12.1）。
 
-    `notes` 同时容纳两种来源：`attempt.note`（扫描层的回滚说明，例如步长怎么缩）
-    与 `result.reason`（求解器为什么失败）。两者都要能追溯，且不能互相覆盖。
+    `notes` 合并两处来源：`attempt.note`（扫描层的回滚说明）与 `result.reason`
+    （求解器为什么失败）。
     """
     converged = bias_fields is not None
     status = "PASS" if converged else "FAIL"

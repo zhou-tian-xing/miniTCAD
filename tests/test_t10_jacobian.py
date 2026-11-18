@@ -1,11 +1,10 @@
-"""T10：用独立的 FD oracle 验证 A 的 `jacobian_qf`（§14.3、W5-B1）。
+"""T10：用独立的 FD oracle 验证 `jacobian_qf`（§14.3）。
 
-判据：在 0 V 与 0.30 V 两个状态上，随机方向 `d` 满足
+判据：0 V 与 0.30 V 上随机方向 `d` 满足
 `‖J_A d − J_FD d‖∞ / max(1, ‖J_FD d‖∞) ≤ 1e-4`。
 
-这个量故意取**方向导数**而不是逐元素相对误差：Jacobian 里有量级相差 1e12 的元素
-（Poisson 行对 `u` 的导数是 `n - p` 量级，连续性行对 `eta` 的导数是通量量级），
-逐元素相对误差会被小元素主导，而 Newton 真正消费的是 `J d` 这个向量。
+取方向导数而不是逐元素误差：Jacobian 的元素跨 `1e12` 量级，逐元素比较会被小元素主导，
+而 Newton 消费的是 `J d` 这个向量。
 """
 
 from __future__ import annotations
@@ -48,10 +47,9 @@ def setup():
 
 
 def _qf_state(device, physical, bias_V: float) -> QFState:
-    """按求解器使用的同一组锚点构造 QF 状态。
+    """用求解器同一组锚点（右端电子、左端空穴）构造 QF 状态。
 
-    锚点必须与 `solve_gummel`/`solve_newton` 一致（右端电子、左端空穴），
-    否则 `eta` 会整体平移，与 `jacobian_qf` 内部使用的 `ref_n/ref_p` 对不上。
+    锚点不一致会让 `eta` 整体平移，与 `jacobian_qf` 内部的 `ref_n/ref_p` 对不上。
     """
     targets = device.contact_targets(bias_V)
     ref_n = float(np.log(targets[4]) - targets[3])
@@ -66,8 +64,7 @@ def test_jacobian_matches_fd_oracle(setup, bias_V):
     qf = _qf_state(device, physical, bias_V)
 
     fd = fd_jacobian(qf, device, bias_V)
-    # 差分方式全部是中心差分：一旦出现单边，说明某个试探点越界，
-    # 此时的 1e-4 判据会比真实精度更松，必须先看见这件事而不是直接通过。
+    # 出现单边说明有试探点越界，此时 1e-4 判据会比真实精度更松，要先看见。
     assert len(fd.one_sided_columns()) == 0
     assert all(status == CENTRAL for status in fd.statuses)
 
@@ -108,12 +105,11 @@ def test_oracle_only_depends_on_the_residual():
 
 
 def test_one_sided_and_failed_columns_are_reported(monkeypatch):
-    """越界时不能静默混用差分：`-h` 侧失败要标 `ONE_SIDED_PLUS`，两侧都失败要抛。
+    """越界时不静默混用差分：单侧失败标 `ONE_SIDED_PLUS`，两侧都失败要抛。
 
-    这里直接替换 `_trial` 来模拟“某一侧的试探点越界”：真的构造一个只让单侧溢出的
-    状态需要把 `exp` 卡在 `1e308` 边缘，那样的测试比被测逻辑本身更脆。
-    `_trial` 的调用顺序是「先求值基点，再逐列求 `+h`、`-h`」，所以第 5 次调用是第 1 列
-    的 `-h` 侧，第 6、7 次是第 2 列的两侧。
+    直接替换 `_trial` 来模拟越界——真造一个只让单侧溢出的状态更脆。
+    调用顺序是「基点，然后逐列 `+h`、`-h`」，所以第 5 次是第 1 列的 `-h` 侧，
+    第 6、7 次是第 2 列的两侧。
     """
     device = build_device(load_config(BASELINE))
     qf = _qf_state(device, equilibrium_start_state(device), 0.0)
@@ -147,10 +143,9 @@ def test_relative_difference_denominator_is_guarded():
 
 
 def test_boundary_qf_targets_satisfy_local_equilibrium(setup):
-    """锚点自洽性：`contact_targets_qf` 在左端给出 `eta_n = eta_p = -v`，右端为 0。
+    """`contact_targets_qf` 在左端给出 `eta_n = eta_p = -v`，右端为 0。
 
-    这是 Newton 与 Gummel 共用的边界条件。若锚点约定被改动（例如改成两端都用电子锚），
-    这里会先失败，而不是等到 T11 的双求解器对照出现 1e-3 量级的“不对劲”。
+    锚点约定被改动时这里先失败，不用等 T11 的双求解器对照出问题。
     """
     device, _, _ = setup
     bias_V = 0.25

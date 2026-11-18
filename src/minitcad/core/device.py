@@ -121,12 +121,11 @@ class SolverConfig:
 class SweepConfig:
     """偏压扫描参数（§9.2）。
 
-    两种模式：`adaptive=False` 走 W4 的固定步进，`biases()` 给出完整的等差偏压表；
-    `adaptive=True` 走 W5 的自适应继续法，偏压表由 `simulation/sweep.py` 在运行中生成，
-    `biases()` 在这时只表示“如果一切都成功会走的路径”，不参与实际求解。
+    `adaptive=False` 走固定步进，`biases()` 给出完整偏压表；`adaptive=True` 走自适应
+    继续法，偏压表由 `simulation/sweep.py` 在运行中生成，此时 `biases()` 不参与求解。
 
-    `step_V` 在两种模式下都是**起始步长**：固定步进时它是唯一的步长，自适应时它是第一次
-    尝试的 `Delta V`，之后按 `grow_factor`/`shrink_factor` 变化。
+    `step_V` 是**起始步长**：固定步进时是唯一步长，自适应时是第一次尝试的 `Delta V`，
+    之后按 `grow_factor`/`shrink_factor` 变化。
     """
 
     start_V: float = 0.0
@@ -162,9 +161,8 @@ class SweepConfig:
             raise ValueError("sweep.min_step_V must be > 0")
         if self.max_step_V < self.min_step_V:
             raise ValueError("sweep.max_step_V must be >= sweep.min_step_V")
-        # 起始步长必须落在自适应区间内，否则第一次收缩/放大就会被夹回边界，
-        # 用户写的 `step_V` 与实际执行的步长不一致。固定步进没有这个语义，
-        # 只在自适应模式下检查——否则一个合法的固定大步骤配置会被无关参数拒绝。
+        # 步长要落在自适应区间内，否则第一次收缩/放大就被夹回边界。固定步进没有这个
+        # 语义，只在自适应时检查，免得合法的固定大步骤配置被无关参数拒绝。
         if self.adaptive and not (self.min_step_V <= self.step_V <= self.max_step_V):
             raise ValueError(
                 f"sweep.step_V must be within [{self.min_step_V}, {self.max_step_V}] "

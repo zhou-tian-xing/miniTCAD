@@ -1,6 +1,6 @@
 """核对根包并入的 Newton 与 `C2_v1` 里 A 的实现是否逐位一致。
 
-两个包同名（`minitcad`），不能在同一进程里同时导入，所以分两步跑、再用 JSON 对比：
+两个包同名，不能在同一进程里导入，所以分两步跑再比：
 
 ```bash
 python scripts/compare_newton_port.py run --src src       --out .tmp/root.json
@@ -8,12 +8,8 @@ python scripts/compare_newton_port.py run --src C2_v1/src --out .tmp/c2v1.json
 python scripts/compare_newton_port.py diff .tmp/root.json .tmp/c2v1.json
 ```
 
-`diff` 比较每个偏压的 `converged / iterations / residual_norm / update_norm / reason`，
-以及最终 `u/n/p` 三个数组的 SHA-256。任何一项不同就以退出码 1 结束。
-
-为什么值得单独留一个脚本：并入 A 的求解器时，B 改了文档、异常类别和参数表，
-“数值没动”是必须能被复核的断言，而不是一句说明。W6-B2 的
-`scripts/compare_solvers.py` 会复用这里的 JSON 形状。
+`diff` 比较每个偏压的 `converged / iterations / residual_norm / update_norm / reason`
+与最终 `u/n/p` 的 SHA-256，不同则以退出码 1 结束。
 """
 
 from __future__ import annotations

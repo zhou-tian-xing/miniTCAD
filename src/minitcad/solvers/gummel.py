@@ -1,22 +1,15 @@
 """Gummel 解耦迭代（QF 口径，第 8.2 节）。
 
-每个外层迭代把耦合方程拆成三步，每步只解一个变量：
+每个外层迭代解三个子问题，各自只解一个变量：Poisson 解 `u`（标量方程，内部 Newton +
+线搜索），电子连续性解 `eta_n`，空穴连续性解 `eta_p`（三对角线性方程）。三步得到
+`star` 后，外层再按 scaled residual 是否下降做一次线搜索。
 
-1. Poisson：固定 `eta_n, eta_p`，解 `u`——非线性标量方程，内部 Newton + 阻尼线搜索；
-2. 电子连续性：固定 `u` 与旧 `eta_p`，解 `eta_n`——线性化后的三对角方程；
-3. 空穴连续性：固定 `u` 与新的 `eta_n`，解 `eta_p`——同 2。
+未知量取 `(u, eta_n, eta_p)` 而非 `(u, n, p)`：连续性残差含 `np - 1`，在 `np ≈ 1` 处
+两个大数相减会丢光有效位；QF 变量下它是 `expm1(ref_n - ref_p + eta_n - eta_p)`。
+推导见 `docs/numerics_gummel.md`。
 
-三步之后得到 `star`，再对外层做一次线搜索：`F(star)` 的 scaled residual 必须下降才接受。
-收敛要同时满足 scaled residual 与 scaled update（`solvers.convergence`），只看残差会把
-停滞的迭代误判成收敛。
-
-**为什么未知量取 `(u, eta_n, eta_p)` 而不是 `(u, n, p)`**：连续性方程的残差含 `np - 1`，
-在 `np ≈ 1` 处两个大数相减会丢光有效位；改成 QF 变量后 `np - 1 = expm1(ref_n - ref_p + eta_n - eta_p)`，
-直接对小的指数差求值。SG 通量同理，用 `expm1(Δeta)` 避开相邻结点浓渡差分的抵消。
-
-**三对角从哪来**：控制体离散后，第 `i` 行只含 `i-1, i, i+1` 三个未知量——
-边通量 `j_{i±1/2}` 各只依赖一侧相邻结点，复合项 `r_i` 只依赖本结点。
-所以每个子步的 Jacobian 是 `(M-2)×(M-2)` 三对角矩阵，用 `scipy.sparse` 的 CSC 三对角装配后直接求解。
+每个子步的 Jacobian 是三对角：第 `i` 行只含 `i-1, i, i+1`，因为边通量只依赖相邻结点、
+复合项只依赖本结点。
 """
 
 from __future__ import annotations
@@ -34,9 +27,7 @@ from minitcad.discretization.residual import ResidualEvaluation, evaluate_qf
 from minitcad.discretization.sg import edge_flux_qf
 from minitcad.solvers.convergence import is_converged, scaled_residual_qf, scaled_update
 
-# 求解过程中 trial 点溢出是预期的：外层线搜索会拒绝它。
-# 屏蔽 numpy 的 overflow 告警，但非有限值仍由 State/Fluxes 的构造检查与
-# scaled_residual_qf 的有限性检查拦下。
+# trial 点溢出是预期路径，由外层线搜索拒绝；非有限值另由状态构造与判据拦下。
 _EXPECTED_FLOAT_ERRORS = (ValueError, FloatingPointError, OverflowError, ArithmeticError)
 
 
@@ -288,9 +279,8 @@ def solve_gummel(
         diagnostics.clear()
 
     targets = device.contact_targets(bias_V)  # (uL, nL, pL, uR, nR, pR)
-    # 锚点取右端电子与左端空穴：n_R = exp(u_R + ref_n)、p_L = exp(-u_L - ref_p)，
-    # 使两端接触的 eta_n（或 eta_p）中至少有一端为 0。锚点本身不影响残差
-    # （见 tests/test_oracle_qf_residual.py 的平移不变性测试），只影响 exp 的取整。
+    # 锚点取右端电子、左端空穴，使对应接触的 eta 为 0。锚点不影响残差
+    # （有平移不变性测试），只影响 exp 的取整。Newton 用同一组锚点。
     ref_n = float(np.log(targets[4]) - targets[3])
     ref_p = float(-np.log(targets[2]) - targets[0])
     targets_qf = contact_targets_qf(device=device, bias_V=bias_V, ref_n=ref_n, ref_p=ref_p)

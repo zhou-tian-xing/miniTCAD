@@ -1,21 +1,13 @@
-"""Newton 用的 `(M,3)` 未知量 Jacobian：九色稀疏中心差分（W5-A6 → B 的 T10 校验对象）。
+"""Newton 用的 Jacobian：九色稀疏中心差分。
 
-**为什么是差分而不是解析求导**：残差 `F(z)` 里含 `expm1`、Bernoulli 函数与分段选择的
-SG 通量，手写解析 Jacobian 的每个分支都要和 `discretization/` 保持逐字同步；一旦残差改了
-而 Jacobian 没跟上，Newton 的二次收敛会悄悄退化成线性，错误极难定位。差分版本永远与残差
-同源，代价只是若干次残差评估。
+用差分而不是解析求导：残差里的 `expm1`、Bernoulli 和分段 SG 通量都要与
+`discretization/` 逐字同步，手写导数一旦落后于残差，收敛性会悄悄退化。差分永远同源。
 
-**为什么可以“九色”**：列 `j` 是结点 `k = j//3` 的第 `c = j%3` 个分量。控制体离散后，
-残差第 `r` 行只依赖结点 `k-1, k, k+1` 的未知量（见 `discretization/residual.py` 的装配），
-所以按 `k % 3` 分色后，**同色结点两两相距至少 3 个网格间距**，扰动一列不会污染另一列的
-差分区间。于是 9 次整向量求值（3 个分量 × 3 种颜色）就能拿到全部 `3M` 列，而不是 `6M` 次。
+九色：控制体离散后第 `r` 行只依赖结点 `k-1, k, k+1`，按 `k % 3` 分色后同色结点相距
+≥3 个网格间距，扰动互不干扰。于是 `3` 个分量 × `3` 种颜色 = 9 次整向量求值就拿到
+全部 `3M` 列，而不是 `6M` 次。
 
-**为什么只取局部 3 个结点块**：整向量差分 `fp - fm` 在数值上只对 `k-1..k+1` 这 9 行非零，
-其余行是 0/0 的抵消噪声（理论上恰好为 0，浮点上是 `1e-16` 量级的垃圾）。截取局部块既
-去掉噪声，也避免把稀疏矩阵填满。
-
-**边界列的退化**：若某个扰动点让 `exp` 溢出，整向量求值失败，该列退回单体中心差分
-（`local_derivative`）；仍失败则把步长减半重试，最多 12 次后显式失败——不静默填 0。
+每列只取 `k-1..k+1` 这 9 行：整向量差分的其余行理论上是 0，截掉可以去掉抵消噪声。
 """
 
 from __future__ import annotations
@@ -27,7 +19,7 @@ from minitcad.core.device import NormalizedDevice
 from minitcad.core.state import QFState
 from minitcad.discretization.residual import residual_qf
 
-# 扰动点落在指数溢出区是正常的：这里把它当成“该方向不可用”，由调用方退化处理。
+# 扰动点落进指数溢出区是正常的，按“该方向不可用”处理。
 _PERTURBATION_FAILURES = (ValueError, FloatingPointError, OverflowError, ArithmeticError)
 
 
@@ -38,13 +30,11 @@ def jacobian_qf(
     *,
     rel_step: float = 1e-5,
 ) -> csc_matrix:
-    """返回 `dF/dz`，`z` 是 `QFState.pack_qf()` 的 `3M` 向量，形状 `(3M, 3M)` 稀疏 CSC。
+    """返回 `dF/dz`，`z = QFState.pack_qf()`，形状 `(3M, 3M)` 稀疏 CSC。
 
-    `rel_step` 是相对步长：`delta_j = rel_step * max(1, |z_j|)`。取 `1e-5` 而不是机器
-    epsilon 量级，是因为 `exp` 的舍入让残差的相对噪声约在 `1e-14`；中心差分的截断误差
-    为 `O(delta^2)`、舍入误差为 `O(eps/delta)`，两者在 `delta ~ 1e-7` 处平衡。这里取
-    `1e-5` 偏向抑制舍入，代价是截断误差略大——Newton 只需要方向足够准，不需要 Jacobian
-    的每个元素都准（线搜索会用真实残差复核）。
+    步长 `delta_j = rel_step * max(1, |z_j|)`。中心差分的截断误差 `O(delta^2)`、
+    舍入误差 `O(eps/delta)` 在 `delta ~ 1e-7` 处平衡；取 `1e-5` 偏向抑制舍入，
+    Newton 只需要方向够准。
     """
     m = state.node_count
     if m != device.mesh.node_count:
@@ -79,7 +69,7 @@ def jacobian_qf(
         """单列差分；中心差分不可用时退化为单边，步长减半重试。"""
         for _ in range(12):
             if z[column] + step == z[column] or z[column] - step == z[column]:
-                # 步长已小到加不上去：再减半只会得到同一个数，直接失败。
+                # 步长小到加不上去，再减半也是同一个数。
                 break
             plus = None
             minus = None

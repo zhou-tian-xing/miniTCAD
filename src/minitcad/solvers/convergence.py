@@ -1,23 +1,12 @@
-"""两种求解器共用的收敛判据：scaled residual 与 scaled update（第 8.2 节）。
+"""两种求解器共用的收敛判据（第 8.2 节）：scaled residual 与 scaled update。
 
-两个量都除以各自的量级，因此可以和 `tol_residual`、`tol_update` 直接比较，
-不受掺杂浓度（可达 `1e6` 量级）与电流量级的影响。
+两个量都除以自身的量级，才能和 `tol_residual`、`tol_update` 直接比较——掺杂浓度到
+`1e6` 量级，绝对残差没有意义。Gummel 与 Newton 共用本模块，否则双求解器对照会把
+“方法差异”和“判据差异”混在一起。
 
-Gummel 与 Newton 必须共用本模块，否则“同一物理状态在两种方法下收敛性不同”
-会把求解器的差异和判据的差异混在一起，Gate 2 的双求解器对照就失去意义。
-
-**scaled residual**：`F(X)` 的三类行分别除以该行在物理上“不可能更小”的尺度——
-
-* Poisson 行除 `max(1, |C̄_i|, n_i, p_i)`：电荷密度的量级；
-* 连续性行除 `max(1, |j|/w, |r|)`：通量散度与复合率的量级；
-* 接触行除 `max(1, |target|)`：Dirichlet 目标值的量级。
-
-**scaled update**：`Δu / max(1,|u_old|,|u_new|)`、`Δn / max(floor, n_old, n_new)`、
-`Δp / max(floor, p_old, p_new)` 的最大值。载流子用 `floor` 防止 `n` 极小时把
-相对步长放大成假的“未收敛”。
-
-`floor` 取 `n_floor`（默认 `1e-15`），与 `NormalizedDevice` 的量级一致：
-`1e-15` 无量纲对应 `1e-5 cm^-3`，低于任何有物理意义的浓度。
+* scaled residual：三类行分别除 `max(1,|C̄|,n,p)`、`max(1,|j|/w,|r|)`、`max(1,|target|)`；
+* scaled update：`Δu`、`Δn`、`Δp` 的相对变化取最大值，载流子分母用 `n_floor` 兜底，
+  防止 `n` 极小时把相对步长放大成假的“未收敛”。
 """
 
 from __future__ import annotations
@@ -38,15 +27,10 @@ def residual_scales_qf(
     evaluation: ResidualEvaluation,
     physical: State | None = None,
 ) -> NDArray[np.float64]:
-    """残差的行尺度，展平成长度 `3M` 的向量，行序与 `evaluation.f` 一致。
+    """残差的行尺度，展平成长度 `3M`，行序与 `evaluation.f` 一致。
 
-    Newton 需要逐行尺度而不只是它们的最大值：它把 Jacobian 的每一行除以该行尺度
-    再解线性方程（行缩放），否则 Poisson 行（量级 `1e6`）会把连续性行（量级 `1`）
-    的修正压在求解精度以下。`scaled_residual_qf` 只是对同一尺度的 `max` 归约，
-    两者必须共用本函数，避免判定用的尺度与求解用的尺度悄悄分叉。
-
-    `physical` 缺省时由 `qf.to_physical()` 重建；求解器在热路径上已经持有物理状态
-    时传入，可以省掉一次 `exp`。
+    Newton 的逐行缩放与判据的 `max` 归约都取自这里，避免两边悄悄分叉。
+    `physical` 缺省时由 `qf.to_physical()` 重建，热路径上传入可省一次 `exp`。
     """
     if physical is None:
         physical = qf.to_physical()
@@ -96,11 +80,7 @@ def scaled_residual_qf(
     evaluation: ResidualEvaluation,
     physical: State | None = None,
 ) -> float:
-    """`max_i |F_i| / scale_i`；`physical` 缺省时由 `qf.to_physical()` 重建。
-
-    `scale` 的三类构造见模块文档。`F` 与 `scale` 一定是同形状 `(M,3)`：
-    `evaluation.f` 是结点交错的一维向量，先 `reshape`。
-    """
+    """`max_i |F_i| / scale_i`；`physical` 缺省时由 `qf.to_physical()` 重建。"""
     scale = residual_scales_qf(qf, device, bias_V, evaluation, physical)
     value = float(np.max(np.abs(evaluation.f) / scale))
     if not np.isfinite(value):
@@ -113,11 +93,10 @@ def scaled_update_physical(
     new: State,
     n_floor: float = 1e-15,
 ) -> float:
-    """三个物理量的相对变化的最大值；载流子分母用 `n_floor` 兜底。
+    """`Δu`、`Δn`、`Δp` 的相对变化取最大值；载流子分母用 `n_floor` 兜底。
 
-    名字里的 `physical` 是必要的：判据作用在 `State(u,n,p)` 上，而不是 QF 迭代变量
-    `(u, eta_n, eta_p)` 上。对 `eta` 直接取相对变化没有物理含义（`eta` 的零点由锚点
-    `ref_n/ref_p` 决定，换一个锚点就换一个数值），所以统一先 `to_physical()`。
+    名字里的 `physical` 是必要的：判据作用在 `State(u,n,p)` 上。`η` 的零点由锚点决定，
+    对它取相对变化没有物理含义。
     """
     if old.node_count != new.node_count:
         raise ValueError("old/new node_count mismatch")
@@ -140,10 +119,10 @@ def scaled_update_physical(
 
 
 def scaled_update(old: State, new: State, floor: float) -> float:
-    """`scaled_update_physical` 的旧名（W4 起 Gummel 在用），保留以免下游导入失效。"""
+    """`scaled_update_physical` 的旧名，保留以免下游导入失效。"""
     return scaled_update_physical(old, new, n_floor=floor)
 
 
 def is_converged(residual_norm: float, update_norm: float, tol_residual: float, tol_update: float) -> bool:
-    """两个判据必须同时满足（第 8.2 节）：只看残差会把停滞的迭代误判为收敛。"""
+    """两个判据必须同时满足：只看残差会把停滞的迭代误判为收敛。"""
     return residual_norm <= tol_residual and update_norm <= tol_update

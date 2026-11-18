@@ -26,7 +26,6 @@ examples/          cm / SI 同器件 YAML、W4/W5 基准配置与数据快照、
 docs/              数学契约、A/B 接口会审、数值约定、Gummel/Newton 数学说明、convergence 模板、B 路线图
 reports/           W2 / W3 / W4(Gate 1) / W5 验收记录
 C2_v1/             A 的独立参考树（不被根包导入）
-ai_example/        单文件教学示例（与本规范无接口关系）
 ```
 
 ## 运行

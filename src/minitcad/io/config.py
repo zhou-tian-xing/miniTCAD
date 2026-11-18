@@ -246,11 +246,10 @@ def _parse_solver(block: object) -> SolverConfig:
 
 
 def _parse_sweep(block: object) -> SweepConfig:
-    """`sweep` 块。`step_V` 缺省时取 `initial_step_V`（两种写法等价，W2 起就接受）。
+    """`sweep` 块。`step_V` 缺省时取 `initial_step_V`。
 
-    `adaptive` 打开 W5 的自适应继续法；`min_step_V/max_step_V/grow_factor/shrink_factor`
-    只在自适应模式下起作用，但**始终解析并校验**——留着不校验的话，一个写错的自适应参数
-    会在固定步进模式下静默通过，等切换模式时才炸。
+    自适应参数只在 `adaptive` 为真时生效，但始终解析并校验：写错了应当场报错，
+    而不是等切换模式时才失败。
     """
     if block is None:
         return SweepConfig()

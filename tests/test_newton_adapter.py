@@ -1,13 +1,8 @@
 """W5：Newton 的适配层契约，以及它与 Gummel 在同一状态下的一致性。
 
-T11（双求解器正式对照）在 W6，这里先把**求解器级别**的契约钉住：
-
-* 两个求解器的签名逐参数一致——`simulation/dc.py` 只按 `method` 选入口，靠的就是这一点；
-* 在 0.30 V 上两者收敛到同一个解（`|Δu|`、终端电流、内部诊断量都对得上）；
-* 失败时 `state is None`、`physics is None`，`iteration_history` 仍可读；
-* 参数非法抛 `ValueError`，不靠返回值表达编程错误。
-
-这条测试也是 Gate 2 的**前置证据**：如果两个求解器连同一个解都算不到，T11 就没法解释。
+钉住四件事：签名与 `solve_gummel` 逐参数一致（`dc.py` 靠这个选入口）、0.30 V 上两者
+收敛到同一个解、失败时 `state` 为 `None`、参数非法抛 `ValueError`。
+T11 的正式对照在 W6。
 """
 
 from __future__ import annotations
