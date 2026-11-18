@@ -13,6 +13,7 @@ import yaml
 from minitcad.core.device import (
     DEVICE_GENERIC_1D,
     DEVICE_PN,
+    MESH_KINDS,
     ORIENTATION_P_LEFT_N_RIGHT,
     DeviceConfig,
     MeshSpec,
@@ -64,7 +65,7 @@ _ALLOWED: dict[str, frozenset[str]] = {
             "acceptor_cm3", "acceptor_m3", "donor_cm3", "donor_m3",
         }
     ),
-    "mesh": frozenset({"type", "nodes", "breakpoints", "per_segment_nodes"}),
+    "mesh": frozenset({"type", "nodes", "breakpoints", "per_segment_nodes", "refine"}),
     "normalization": frozenset(
         {
             "reference_diffusivity_cm2_s", "reference_diffusivity_m2_s",
@@ -183,7 +184,13 @@ def _parse_mesh(block: dict, system: str) -> MeshSpec:
             breakpoints_cm=breaks,
             per_segment_nodes=tuple(_node_count(n) for n in block["per_segment_nodes"]),
         )
-    raise UnitError(f"mesh.type must be 'uniform' or 'segmented', got {kind!r}")
+    if kind == "refined":
+        # 结区坐标取自掺杂剖面，不在 mesh 块里重复声明，避免两处不一致。
+        refine = block.get("refine", 20.0)
+        if not isinstance(refine, (int, float)) or isinstance(refine, bool):
+            raise UnitError("mesh.refine must be a number")
+        return MeshSpec(kind="refined", nodes=_node_count(block["nodes"]), refine=float(refine))
+    raise UnitError(f"mesh.type must be one of {MESH_KINDS}, got {kind!r}")
 
 
 def _node_count(value: object) -> int:
@@ -426,6 +433,7 @@ def config_payload(config: DeviceConfig) -> dict:
             "nodes": config.mesh.nodes,
             "breakpoints_cm": list(config.mesh.breakpoints_cm),
             "per_segment_nodes": list(config.mesh.per_segment_nodes),
+            "refine": config.mesh.refine,
         },
         "normalization": {
             "reference_diffusivity_cm2_s": config.normalization.reference_diffusivity_cm2_s,
@@ -444,6 +452,11 @@ def config_payload(config: DeviceConfig) -> dict:
             "start_V": config.sweep.start_V,
             "stop_V": config.sweep.stop_V,
             "step_V": config.sweep.step_V,
+            "adaptive": config.sweep.adaptive,
+            "min_step_V": config.sweep.min_step_V,
+            "max_step_V": config.sweep.max_step_V,
+            "grow_factor": config.sweep.grow_factor,
+            "shrink_factor": config.sweep.shrink_factor,
         },
         "output": {
             "directory": config.output.directory,
@@ -459,3 +472,101 @@ def config_fingerprint(config: DeviceConfig) -> str:
 
     payload = json.dumps(config_payload(config), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def save_config(config: DeviceConfig, path: str | Path) -> Path:
+    """把 `DeviceConfig` 写成 YAML，`load_config` 能读回**同一指纹**的配置。
+
+    GUI 的“保存”走这里：手写 YAML 容易漏字段或改单位，而指纹会立刻暴露差异。
+    一律按 cm 写（项目的默认工程单位）；如果原配置是用 SI 声明的，保存后
+    `input_unit_system` 变成 `cm`，物理内容不变、指纹随之改变——这是有意的，
+    文件里声明的单位本来就该反映在指纹里。
+    """
+    import yaml
+
+    target = Path(path)
+    material = config.material
+    document = {
+        "units": {"system": CM},
+        "device": {
+            "type": config.device_type,
+            "orientation": config.orientation,
+            "length_cm": config.length_cm,
+            "area_cm2": config.area_cm2,
+            "temperature_K": config.temperature_k,
+        },
+        "material": {
+            "name": material.name,
+            "epsilon_relative": material.epsilon_relative,
+            "intrinsic_density_cm3": material.intrinsic_density_cm3,
+            "mobility_n_cm2_per_Vs": material.mobility_n_cm2_per_Vs,
+            "mobility_p_cm2_per_Vs": material.mobility_p_cm2_per_Vs,
+            "lifetime_n_s": material.lifetime_n_s,
+            "lifetime_p_s": material.lifetime_p_s,
+            "bandgap_eV": material.bandgap_eV,
+        },
+        "regions": [
+            {
+                "start_cm": region.start_cm,
+                "end_cm": region.end_cm,
+                "material": region.material,
+                "acceptor_cm3": region.acceptor_cm3,
+                "donor_cm3": region.donor_cm3,
+            }
+            for region in config.regions
+        ],
+        "mesh": {"type": config.mesh.kind, "nodes": config.mesh.nodes},
+        "normalization": {},
+        "contacts": {
+            "type": "ideal_ohmic",
+            "left_terminal": "p",
+            "right_terminal": "n",
+            "right_voltage_V": config.right_voltage_V,
+            "bias_definition": "left_minus_right",
+        },
+        "solver": {
+            "method": config.solver.method,
+            "jacobian": config.solver.jacobian,
+            "tol_residual": config.solver.tol_residual,
+            "tol_update": config.solver.tol_update,
+            "max_iter": config.solver.max_iter,
+            "alpha_min": config.solver.alpha_min,
+            "positive_scale_floor": config.solver.n_floor,
+        },
+        "sweep": {
+            "start_V": config.sweep.start_V,
+            "stop_V": config.sweep.stop_V,
+            "step_V": config.sweep.step_V,
+            "adaptive": config.sweep.adaptive,
+            "min_step_V": config.sweep.min_step_V,
+            "max_step_V": config.sweep.max_step_V,
+            "grow_factor": config.sweep.grow_factor,
+            "shrink_factor": config.sweep.shrink_factor,
+        },
+        "output": {
+            "directory": config.output.directory,
+            "unit_system": config.output.unit_system,
+        },
+    }
+
+    normalization = document["normalization"]
+    if config.normalization.reference_diffusivity_cm2_s is not None:
+        normalization["reference_diffusivity_cm2_s"] = config.normalization.reference_diffusivity_cm2_s
+    else:
+        normalization["reference_mobility_cm2_per_Vs"] = config.normalization.reference_mobility_cm2_per_Vs
+
+    if config.mesh.kind == "segmented":
+        document["mesh"] = {
+            "type": "segmented",
+            "breakpoints": list(config.mesh.breakpoints_cm),
+            "per_segment_nodes": list(config.mesh.per_segment_nodes),
+        }
+    elif config.mesh.kind == "refined":
+        document["mesh"] = {"type": "refined", "nodes": config.mesh.nodes, "refine": config.mesh.refine}
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        yaml.safe_dump(document, sort_keys=False, allow_unicode=True, default_flow_style=False),
+        encoding="utf-8",
+    )
+    return target

@@ -203,8 +203,14 @@ def check_header(header: Sequence[str]) -> list[str]:
 
 
 def _blank_row(**values: object) -> dict:
-    """22 列齐全的行；缺省列写空字段（`format_row` 会拒绝缺键）。"""
+    """22 列齐全的行；缺省列写空字段（`format_row` 会拒绝缺键）。
+
+    `theory_kind` 缺省为 `"none"`（而不是留空）：冻结的 schema 只承认
+    `exact`/`reference`/`none` 三种取值，省掉这个字段会让“没有理论”出现两种写法，
+    验收器就没法区分“本行没有理论”和“writer 忘了填”。
+    """
     row = {column: None for column in CSV_COLUMNS}
+    row["theory_kind"] = "none"
     row.update(values)
     return row
 
@@ -318,9 +324,14 @@ def _sweep_rows(run, attempt, bias_fields, system: str) -> list[dict]:
         status=status,
     )
     rows = [
+        # 施加电压本身是精确已知的（`theory_value` 就是请求的偏压）。0 V 时理论值为 0，
+        # 相对误差按 §12.1 必须留空，不能写 0（0/0 不是 0）。
         _blank_row(**base, quantity="applied_voltage_V", unit="V",
                    numeric_value=float(attempt.bias_V), theory_value=float(attempt.bias_V),
-                   theory_kind="exact", theory_abs_error=0.0, theory_rel_error=0.0, notes=notes),
+                   theory_kind="exact",
+                   theory_abs_error=0.0,
+                   theory_rel_error=0.0 if abs(float(attempt.bias_V)) > 0.0 else None,
+                   notes=notes),
         _blank_row(**base, quantity="iteration_count", unit="1",
                    numeric_value=float(attempt.result.iterations) if attempt.result else None),
         _blank_row(**base, quantity="runtime_s", unit="s", numeric_value=float(attempt.runtime_s)),

@@ -17,13 +17,14 @@ src/minitcad/
   discretization/  A：Bernoulli、Poisson、SG、continuity、唯一残差 evaluate_qf/residual_qf
   solvers/         A：Gummel、Newton、Jacobian + B 的共用收敛判据
   simulation/      B：dc 单点编排、sweep 固定步进/自适应回滚、diagnostics 物理量展开；A：equilibrium 初值
-  verification/    B：T10 的独立 FD Jacobian oracle（不 import solvers）
+  verification/    B：T10 独立 FD Jacobian oracle（不 import solvers）、T12 网格参考
   api.py           B：run() / write_required_outputs()（GUI 与 CLI 的唯一入口）
   cli.py           B：minitcad validate / solve
 tests/             B 的独立 oracle（T01–T10）、API/CLI/writer 契约、T13 回滚与取消契约、基准快照
-scripts/           B：一次性核对脚本（Newton 并入一致性；W6 起扩成 run_gates）
+scripts/           B：accept_outputs（§12.4 验收器）、run_mesh_convergence（T12 表）、
+                   compare_newton_port、diagnose_newton_step
 examples/          cm / SI 同器件 YAML、W4/W5 基准配置与数据快照、SI MMS 验证器
-docs/              数学契约、A/B 接口会审、数值约定、Gummel/Newton 数学说明、convergence 模板、B 路线图
+docs/              数学契约、接口会审、数值约定、Gummel/Newton 数学说明、API/用户/GUI 契约、B 路线图
 reports/           W2 / W3 / W4(Gate 1) / W5 验收记录
 C2_v1/             A 的独立参考树（不被根包导入）
 ```
@@ -31,7 +32,7 @@ C2_v1/             A 的独立参考树（不被根包导入）
 ## 运行
 
 ```bash
-python -m pytest -q                              # 全量（333 passed）
+python -m pytest -q                              # 全量（385 passed）
 python -m pytest tests/test_week04_gate1.py -q   # T08/T09
 python -m pytest tests/test_t10_jacobian.py tests/test_t13_rollback.py -q   # T10/T13
 
@@ -59,8 +60,8 @@ PNG 需要 matplotlib（`pyproject.toml` 的 `dev` extras 已包含）。
 | W3 | T01–T07 独立 oracle、反向 PN、`RunResult`+CLI 骨架、22 列 CSV schema、QF 口径核对 | 完成 | `reports/week03_acceptance.md` |
 | W4 | T08/T09、基准配置+快照、固定步进扫描、`run()`/CLI 接线、三文件 writer 初版 | 完成（Gate 1 = PASS） | `reports/week04_gate1.md` |
 | W5 | FD Jacobian oracle（T10）、自适应扫压与回滚（T13）、取消契约冻结、Newton 并入根包 | 完成 | `reports/week05_acceptance.md` |
-| W6 | T10/T11/T13、双求解器对比脚本、细网格参考、writer 补齐 | 未开始 | `docs/B_roadmap.md` §2 |
-| W7 | refine 网格、T12/T14/T15、schema/GUI API 冻结、CI | 未开始 | `docs/B_roadmap.md` §3 |
+| W6 | T11 双求解器正式对照、对比脚本、writer 补齐 | **顺延**（Gate 2 未裁决） | `reports/week07_core_freeze.md` §8 |
+| W7 | refine 网格、T12/T14/T15、三文件验收器、API/YAML/CLI 与 GUI 契约冻结、CI | 完成（`w07-core-freeze`） | `reports/week07_core_freeze.md` |
 | W8 | GUI/CLI 一致性、T16/T17、Windows 打包与 T18 | 未开始 | `docs/B_roadmap.md` §4 |
 
 **单位契约**：输入 `cm` 或 `si`（适配层换算成 cm）→ 内核无量纲 → writer 按 `output.unit_system` 输出。

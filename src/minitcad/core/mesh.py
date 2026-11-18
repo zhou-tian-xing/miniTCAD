@@ -142,10 +142,10 @@ def segmented(
     per_segment_nodes: object,
     l0_cm: float,
 ) -> Mesh1D:
-    """生成分段网格：每段各自等分，方便在结区加密。
+    """生成分段网格：每段各自等分。
 
-    breakpoints_cm 是分段点，从 0 到 length_cm 递增。
-    per_segment_nodes[k] 是第 k 段的结点数（含两端，至少 2）。
+    breakpoints_cm 是分段点，从 0 到 length_cm 递增；per_segment_nodes[k] 是第 k 段的
+    结点数（含两端，至少 2）。
     """
     if not np.isfinite(length_cm) or length_cm <= 0.0:
         raise ValueError("length_cm must be finite and > 0")
@@ -176,3 +176,74 @@ def segmented(
         piece = np.linspace(breaks[k], breaks[k + 1], int(counts[k]))
         pieces.append(piece if k == 0 else piece[1:])
     return _build(np.concatenate(pieces), l0_cm)
+
+
+def refined(
+    length_cm: float,
+    junction_cm: float,
+    nodes: int,
+    l0_cm: float,
+    *,
+    refine: float = 20.0,
+) -> Mesh1D:
+    """结区加密网格：结点**总数固定**，结区一侧最密，向两端等比变疏。
+
+    `refine` 是**远端单元与结区单元的长度比**（无量纲，`refine=1` 即均匀）。用比例而不是
+    公比来参数化，是因为公比的绝对值依赖段数：`M ≈ 200` 时公比 `1.15` 会给出 1000 倍的
+    跨度，而 `1.03` 才对应 20 倍——写成比例就不会选错。
+
+    结区落在结点上（加密的意义所在）。两侧各是一条等比数列：某侧长 `l`、`n` 段、公比 `r`，
+    首段（贴结区）为 `h0 = l (r-1) / (r^n - 1)`，`h_k = h0 r^k`，故 `sum h_k = l`；
+    `r` 由 `r^(n-1) = refine` 解出。
+
+    段数 `nodes - 1` 按结区位置分配，四舍五入到整数，两侧都至少一段。所以给定 `nodes`
+    一定得到 `nodes` 个结点，可与同结点数的 `uniform` 直接比较（§15 实验 C 要求总结点数不变）。
+
+    参数非法一律显式失败：`refine < 1`、结区不在 `(0, length_cm)` 内、结点数太少都报错。
+    """
+    if not np.isfinite(length_cm) or length_cm <= 0.0:
+        raise ValueError("length_cm must be finite and > 0")
+    if not np.isfinite(l0_cm) or l0_cm <= 0.0:
+        raise ValueError("l0_cm must be finite and > 0")
+    if isinstance(nodes, bool) or not isinstance(nodes, (int, np.integer)):
+        raise ValueError(f"nodes must be an integer, got {nodes!r}")
+    if nodes < MIN_NODES:
+        raise ValueError(f"nodes must be >= {MIN_NODES}, got {nodes}")
+    if not np.isfinite(refine) or refine < 1.0:
+        raise ValueError(f"refine must be finite and >= 1, got {refine}")
+    if not np.isfinite(junction_cm) or not (0.0 < junction_cm < length_cm):
+        raise ValueError(
+            f"junction_cm must lie strictly inside (0, {length_cm}), got {junction_cm}"
+        )
+
+    if np.isclose(refine, 1.0, rtol=0.0, atol=1e-12):
+        # 不加密就是均匀网格：直接复用 uniform，让两者逐位相同。
+        return uniform(length_cm, int(nodes), l0_cm)
+
+    cells = int(nodes) - 1
+    left_cells = int(round(cells * junction_cm / length_cm))
+    left_cells = max(1, min(left_cells, cells - 1))
+    right_cells = cells - left_cells
+
+    def offsets(length: float, count: int) -> NDArray[np.float64]:
+        """距结区一端的 `count+1` 个偏移量，间距从这里向远端按公比增长。"""
+        if count == 1:
+            return np.array([0.0, length])
+        growth = refine ** (1.0 / (count - 1))
+        first = length * (growth - 1.0) / (growth**count - 1.0)
+        if not np.isfinite(first) or first <= 0.0:
+            raise ValueError(
+                f"refine={refine} over {count} cells cannot resolve the first step; "
+                "reduce refine or the node count"
+            )
+        return np.concatenate(
+            ([0.0], np.cumsum(first * growth ** np.arange(count, dtype=np.float64)))
+        )
+
+    # 两侧都以“贴结区的一段”为最小段，所以从结区向外生成再映射回去。
+    left = junction_cm - offsets(junction_cm, left_cells)
+    right = junction_cm + offsets(length_cm - junction_cm, right_cells)
+    x = np.concatenate((left[::-1], right[1:]))
+    x[0] = 0.0
+    x[-1] = length_cm
+    return _build(x, l0_cm)

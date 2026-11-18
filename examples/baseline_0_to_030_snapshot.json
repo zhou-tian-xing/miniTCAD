@@ -1,12 +1,12 @@
 {
   "config": "examples/pn_baseline_0_to_030.yaml",
-  "config_sha256": "fd18583e815b874004a3db0b6ad2d8417596377cc211853f00748fa210e243e5",
+  "config_sha256": "5d131ecfcdf99873dff6ea8e623225f979cdb1b8ba419ff1c716044ffcc20a68",
   "environment": {
     "python": "3.14.6",
     "numpy": "2.5.3",
     "scipy": "1.18.0"
   },
-  "generated": "2026-11-04",
+  "generated": "2026-11-18",
   "decision": "ACCEPTED",
   "biases": [
     {
@@ -73,5 +73,6 @@
     "contact_error": 0.0,
     "max_residual": 6.694195202391561e-10,
     "max_update": 2.1440857542815606e-07
-  }
+  },
+  "note": "config_sha256 在 w07-core-freeze 重新计算：config_payload 增加了 mesh.refine 与 sweep.adaptive/min_step_V/max_step_V/grow_factor/shrink_factor。物理量与迭代数未变，只是指纹的定义域变完整了（此前改这些字段不会改变指纹）。"
 }

@@ -24,20 +24,28 @@ DEVICE_GENERIC_1D = "generic_1d"
 ORIENTATION_P_LEFT_N_RIGHT = "p_left_n_right"
 
 SOLVER_METHODS = ("gummel", "newton")
+MESH_KINDS = ("uniform", "segmented", "refined")
 UNIT_SYSTEMS = ("cm", "si")
 
 
 @dataclass(frozen=True, slots=True)
 class MeshSpec:
-    """YAML 里的网格声明。uniform 用 nodes；segmented 用断点和每段结点数。"""
+    """YAML 里的网格声明（第 5 节）。
+
+    * `uniform`：`nodes` 个等距结点；
+    * `segmented`：`breakpoints_cm` + `per_segment_nodes`，每段各自等分；
+    * `refined`：`nodes` 个结点，总数不变，结区最密、向两端按 `refine` 变疏。
+      结区坐标由掺杂剖面决定，不在 YAML 里重复写。
+    """
 
     kind: str
     nodes: int | None = None
     breakpoints_cm: tuple[float, ...] = ()
     per_segment_nodes: tuple[int, ...] = ()
+    refine: float = 20.0
 
     def __post_init__(self) -> None:
-        if self.kind not in ("uniform", "segmented"):
+        if self.kind not in MESH_KINDS:
             raise ValueError(f"unknown mesh kind: {self.kind!r}")
         if self.kind == "uniform":
             if (
@@ -47,6 +55,16 @@ class MeshSpec:
                 or self.nodes < mesh_module.MIN_NODES
             ):
                 raise ValueError(f"uniform mesh needs integer nodes >= {mesh_module.MIN_NODES}")
+        elif self.kind == "refined":
+            if (
+                self.nodes is None
+                or isinstance(self.nodes, bool)
+                or not isinstance(self.nodes, (int, np.integer))
+                or self.nodes < mesh_module.MIN_NODES
+            ):
+                raise ValueError(f"refined mesh needs integer nodes >= {mesh_module.MIN_NODES}")
+            if not isfinite(self.refine) or self.refine < 1.0:
+                raise ValueError(f"refined mesh needs refine >= 1, got {self.refine}")
         else:
             if len(self.breakpoints_cm) < 2:
                 raise ValueError("segmented mesh needs at least two breakpoints")
@@ -58,10 +76,24 @@ class MeshSpec:
             ):
                 raise ValueError("per_segment_nodes must contain integer node counts")
 
-    def build(self, length_cm: float, l0_cm: float) -> Mesh1D:
-        """按声明生成网格。"""
+    def build(
+        self,
+        length_cm: float,
+        l0_cm: float,
+        junctions_cm: tuple[float, ...] = (),
+    ) -> Mesh1D:
+        """按声明生成网格；`refined` 需要一个结区坐标。"""
         if self.kind == "uniform":
             return mesh_module.uniform(length_cm, int(self.nodes), l0_cm)
+        if self.kind == "refined":
+            if len(junctions_cm) != 1:
+                raise ValueError(
+                    "refined mesh目前只支持单结器件；"
+                    f"got {len(junctions_cm)} junctions"
+                )
+            return mesh_module.refined(
+                length_cm, float(junctions_cm[0]), int(self.nodes), l0_cm, refine=self.refine
+            )
         return mesh_module.segmented(length_cm, self.breakpoints_cm, self.per_segment_nodes, l0_cm)
 
 
@@ -299,13 +331,20 @@ class NormalizedDevice:
 
 
 def _require_junctions_on_nodes(config: DeviceConfig, mesh: Mesh1D, profile: DopingProfile) -> None:
-    """分段网格必须把每个结区坐标都放在断点（也就是结点）上（第 5.1、5.3 节）。
+    """`segmented`/`refined` 网格必须把每个结区坐标放在结点上（第 5.1、5.3 节）。
 
-    均匀网格的结点由结点数决定，结区可以落在控制体内部，由 ``cbar_nd`` 的控制体
-    积分吸收，因此这里只约束 ``segmented``；但一旦声明``segmented``，结区就必须是
-    结点，否则“在结区加密”的意图没有兑现，求解器仍会在整段上取平均。
+    `uniform` 不约束：结点位置由个数决定，结区落在控制体内部时由 `cbar_nd` 的积分吸收。
+    另外两种既然声明了“在结区加密”，结区就必须是结点，否则意图没有兑现。
     """
-    if config.mesh.kind != "segmented":
+    if config.mesh.kind == "uniform":
+        return
+    if config.mesh.kind == "refined":
+        # 生成器已经保证结区是结点，这里只做一次断言式的复核。
+        for region in profile.regions[:-1]:
+            if not np.any(np.isclose(mesh.x_nodes_cm, region.end_cm, rtol=1e-12, atol=0.0)):
+                raise ValueError(
+                    f"refined mesh failed to place junction {region.end_cm:.12g} cm on a node"
+                )
         return
     breaks = np.asarray(config.mesh.breakpoints_cm, dtype=np.float64)
     nodes = mesh.x_nodes_cm
@@ -328,8 +367,9 @@ def build_device(config: DeviceConfig) -> NormalizedDevice:
     """由 DeviceConfig 构造 NormalizedDevice。"""
     policy = material_parameter_policy(config.material, config.temperature_k)
     scales = config.normalization.scales(config.material, config.temperature_k)
-    mesh = config.mesh.build(config.length_cm, scales.l0_cm)
     profile = config.doping_profile
+    junctions_cm = tuple(region.end_cm for region in profile.regions[:-1])
+    mesh = config.mesh.build(config.length_cm, scales.l0_cm, junctions_cm)
     _require_junctions_on_nodes(config, mesh, profile)
 
     ni = scales.n0_cm3

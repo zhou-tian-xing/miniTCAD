@@ -12,6 +12,11 @@
 > 并入根包并与 A 的实现逐位一致；`Attempt` 增加 `note`、`SweepConfig` 增加自适应五项；
 > `convergence.py` 抽出 `residual_scales_qf`、`scaled_update` 改名 `scaled_update_physical`
 > （旧名保留）。**CSV 的 22 列未变。**
+> **2026-11-18 W7**：核心冻结。新增公共函数 `save_config` 与包级导出
+> `load_config/parse_config_dict/config_fingerprint`；`config_payload` 补全 `mesh.refine` 与
+> 自适应五项，**所有旧 `config_sha256` 失效**（基准快照已重算）；`MeshSpec` 增
+> `kind="refined"`。CSV 列序仍未变，但两处取值规则收紧：`theory_kind` 缺省写 `none`、
+> 理论值为 0 时 `theory_rel_error` 留空。详见 `reports/week07_core_freeze.md`。
 > **依据**：`目的与规划.md` §14.7、§10.3；A 的 `C2_v1/src/minitcad/discretization/residual.py`
 > 头注释与 `C2_v1/tests/test_qf_state.py`、`test_qf_stability.py`。
 > **Owner**：B 维护本表，A 校核。

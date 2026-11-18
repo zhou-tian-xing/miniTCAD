@@ -73,17 +73,20 @@ python -m pytest tests/test_t10_jacobian.py -q
 
 Gate 2 失败处理：任一 T10/T11/T13 不通过即 Gate 2 = `REJECTED`，不删偏压点、不改阈值。
 
-## 3. W7：核心冻结（`w07-core-freeze`）
+## 3. W7：核心冻结（`w07-core-freeze`，已完成 2026-11-18）
 
-| B 任务 | 产物 | 验收 |
+| B 任务 | 产物 | 结果 |
 |---|---|---|
-| W7-B1 网格生成器 | `core/mesh.py` 增加结区 refine 规则（`refine_near(c, width, ratio)`） | cm/nd 同尺度；结区断点强制落在结点；非法参数显式失败 |
-| W7-B2 细网格参考与收敛表（T12/T14/T15） | `verification/reference.py`、`reports/week07_mesh_convergence.md` | 误差随加密单调下降；表内每行可重跑 |
-| W7-B3 三文件 schema 冻结 | `scripts/accept_outputs.py` | 逐条检查 §12.4：列名/`quantity`/`unit`、理论空值、`run_id`/SHA 一致、PNG 可读、报告十节 |
-| W7-B4 CLI/API/YAML 冻结 | `docs/api_reference.md`、`docs/user_guide.md`、CI 配置 | `tests/test_public_api.py` 扩展为含 `run`/`write_required_outputs` 的签名冻结 |
-| W7-B5 GUI API 冻结 | `docs/gui_api_contract.md` | `load_config/parse_config_dict/save_config/run/write_required_outputs` 与 `RunResult` 字段固化 |
+| W7-B1 网格生成器 | `core/mesh.py::refined(c, nodes, refine)`、`MeshSpec(kind="refined")` | 结点数固定、结区落结点、`refine=1` 等价 `uniform`；见 `reports/week07_core_freeze.md` §2 |
+| W7-B2 细网格参考与收敛表 | `verification/reference.py`、`scripts/run_mesh_convergence.py`、`reports/week07_mesh_convergence.md` | T12 **PASS**（最细两级 `2.12e-4`）；`E_peak` 非单调已如实记录 |
+| W7-B3 三文件 schema 冻结 | `scripts/accept_outputs.py`（17 项，不 import writer） | T14 **PASS**：cm/SI/newton-adaptive/REJECTED 四类场景；并修掉它发现的两处 schema 缺陷 |
+| W7-B4 CLI/API/YAML 冻结 | `docs/api_reference.md`、`docs/user_guide.md`、`.github/workflows/ci.yml` | T15 **PASS**；`save_config` 新增；指纹补全 `mesh.refine` 与自适应五项（旧指纹失效） |
+| W7-B5 GUI API 冻结 | `docs/gui_api_contract.md` | 五个函数、线程规则、三条路径、T16/T17 对应关系 |
 
 冻结后 W8 只允许 GUI、联调与阻塞性 bug 修复。
+
+> **W6 顺延**：本轮按安排先做 W7，Gate 2（T11 双求解器正式对照）**未裁决**，
+> 不得据本文件宣称 Gate 2 通过。补做计划见 `reports/week07_core_freeze.md` §8。
 
 ## 4. W8：GUI 联调与 Windows 发布（`w08-release`）
 
