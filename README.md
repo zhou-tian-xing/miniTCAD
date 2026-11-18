@@ -71,6 +71,6 @@ PNG 需要 matplotlib（`pyproject.toml` 的 `dev` extras 已包含）。
 
 - 远端 `origin/main` 已包含 A 的 `d53871e`（W3 物理/离散）、`b195ce5`（准费米能级重构）
   与 `e6c8a5f`（Newton + 反向扫压）；B 已同步到 `e6c8a5f`，`C2_v1` 参考树 `215 passed`。
-- 待 A 处理：Newton 的继续法边界（`ΔV > 0.02 V` 时 0.10–0.15 V 失败）、
+- 待 A 处理：Newton 在 0.10–0.15 V 失败（原因未查清）、
   `reverse_sweep.py` 的归口、`area_cm2` 可空与 `normalization.py` 命名分叉
   （见 `docs/a_b_interface_week02.md` §5、`reports/week05_acceptance.md` §8）。

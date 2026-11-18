@@ -112,8 +112,29 @@ def main(argv: list[str] | None = None) -> int:
     ):
         peak, node1 = signature(start, target_V)
         print(f"    {label:28s} max |jp| = {peak:.2e}  node 1 scaled = {np.array2string(node1, precision=3)}")
-    print("    -> both jumps raise eta_n by the same 0.05/V_T, yet only one fails.")
-    print("       The outcome tracks the SIZE of the step, not the presence of the layer.")
+    print("    -> identical boundary signature, different outcome: the layer is not the criterion.")
+
+    print("[6] control: a 0.05 V ladder where every jump has the SAME delta v")
+    print("    (so 'the step is too big' cannot explain the failures either)")
+    from minitcad.core.device import SolverConfig
+    from minitcad.simulation.dc import solve_single_bias
+
+    newton = SolverConfig(method="newton")
+    gummel = SolverConfig(method="gummel")
+    state = equilibrium
+    for step in range(1, 7):
+        target = round(step * 0.05, 12)
+        tried, _ = solve_single_bias(device, target, state, newton)
+        peak, node1 = signature(state, target)
+        print(
+            f"    target {target:5.2f} V  jump {0.05:.2f}  "
+            f"{'PASS' if tried.converged else 'FAIL':4s} it={tried.iterations:2d}  "
+            f"max |jp| = {peak:.2e}"
+        )
+        accepted, _ = solve_single_bias(device, target, state, gummel)
+        state = accepted.state
+    print("    -> same delta v, same signature: 0.10/0.15 fail while 0.20/0.25/0.30 pass.")
+    print("       The cause is NOT the step size and NOT the boundary layer. Still open.")
     return 0
 
 

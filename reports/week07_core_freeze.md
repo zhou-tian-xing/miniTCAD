@@ -150,7 +150,7 @@ YAML 侧是 `mesh: {type: refined, nodes: 201, refine: 20}`：
 1. **Gate 2 未裁决（W6 顺延）**：T11 双求解器正式对照（势峰值差 `≤1e-3 V`、非零终端
    电流差 `≤1%`）没有独立跑过；W5 只给了 0.30 V 单点的前置证据
    （`reports/week05_acceptance.md` §6）。`w07-core-freeze` 不含 Gate 2 的结论。
-2. **Newton 继续法边界**（`ΔV > 0.02 V` 时 0.10–0.15 V 失败）仍待 A 定性，
+2. **Newton 在 0.10–0.15 V 失败，原因未查清**（已证伪“台阶即原因”“Δv 太大”两个假设），
    `docs/a_b_interface_week02.md` §5 第 7 项。
 3. **A 的 `reverse_sweep.py` 未并入**根包，W6 若要覆盖反向偏压需先定口径。
 4. **T05 的 W7 变网格终审**属 A 的 W7-A1，B 侧只提供 `refined` 网格与验收器。
