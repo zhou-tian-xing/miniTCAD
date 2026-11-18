@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"    node 1 scaled rows                 = {np.array2string(scaled[1], precision=4)}")
     interior = np.concatenate([scaled[2:-1].ravel(), scaled[0], scaled[-1]])
     print(f"    max scaled residual elsewhere      = {interior.max():.3e}")
-    print("    -> the failure is localized at node 1, and there |f| == scale,")
+    print("    -> the misbehaviour is localized at node 1, and there |f| == scale,")
     print("       because the row scale is computed from the spurious flux itself.")
 
     print("[4] same target, smaller jump (bisect the step):")
@@ -90,6 +90,36 @@ def main(argv: list[str] | None = None) -> int:
         middle = args.src_V + fraction * (args.dst_V - args.src_V)
         step = solve_newton(device, middle, source.state)
         print(f"    {args.src_V:g} -> {middle:.6g} V : converged={step.converged} reason={step.reason}")
+
+    print("[5] control: the SAME signature also shows up in a jump that converges")
+    print("    (so the boundary layer alone is not what makes it fail)")
+
+    def signature(start_state, target_V):
+        tgt = device.contact_targets(target_V)
+        n_ref = float(np.log(tgt[4]) - tgt[3])
+        p_ref = float(-np.log(tgt[2]) - tgt[0])
+        trial = _project_contacts(
+            QFState.from_physical(start_state, ref_n=n_ref, ref_p=p_ref),
+            contact_targets_qf(device, target_V, ref_n=n_ref, ref_p=p_ref),
+        )
+        body = trial.to_physical()
+        evaluation = evaluate_qf(state=trial, device=device, bias_V=target_V)
+        row_scales = residual_scales_qf(
+            trial, device, target_V, evaluation, body
+        ).reshape(-1, 3)
+        return (
+            float(np.abs(evaluation.fluxes.jp_edges).max()),
+            np.abs(evaluation.f).reshape(-1, 3)[1] / row_scales[1],
+        )
+
+    for label, start, target_V in (
+        ("0.00 -> 0.05 V (converges)", equilibrium, 0.05),
+        (f"{args.src_V:g} -> {args.dst_V:g} V (fails)", source.state, args.dst_V),
+    ):
+        peak, node1 = signature(start, target_V)
+        print(f"    {label:28s} max |jp| = {peak:.2e}  node 1 scaled = {np.array2string(node1, precision=3)}")
+    print("    -> both jumps raise eta_n by the same 0.05/V_T, yet only one fails.")
+    print("       The outcome tracks the SIZE of the step, not the presence of the layer.")
     return 0
 
 
