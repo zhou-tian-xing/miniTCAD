@@ -134,7 +134,9 @@ def main(argv: list[str] | None = None) -> int:
         accepted, _ = solve_single_bias(device, target, state, gummel)
         state = accepted.state
     print("    -> same delta v, same signature: 0.10/0.15 fail while 0.20/0.25/0.30 pass.")
-    print("       The cause is NOT the step size and NOT the boundary layer. Still open.")
+    print("       So it is neither the step size nor the boundary layer.")
+    print("[7] at alpha=1 the full Newton step raises merit from 1.888 to 32.7 at 0.10 V,")
+    print("    while at 0.20 V it rises only to 4.63 (see report section 4.2).")
     return 0
 
 
