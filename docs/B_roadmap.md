@@ -59,7 +59,9 @@ python -m pytest tests/test_t10_jacobian.py -q
 ## 2. W6：Gate 2（双求解器与自适应扫压）
 
 **依赖 A**：Newton 已可用（W5 并入）；A 的 W6-A1 对照实验数据。
-**已知风险**：Newton 在 0.10–0.15 V 会失败（原因未查清，见 `docs/a_b_interface_week02.md` §5 第 7 项），靠回滚兜住
+**已完成（2026-11-18 补做）**：T11 在 0.02 V 梯子上 15/15 对照通过（`3.7e-13 V` / `5.3e-10`），
+Gate 2 = PASS，见 `reports/week06_gate2.md`。0.05 V 梯子上 Newton 在 0.10/0.15 V 整步过冲
+（`docs/a_b_interface_week02.md` §5 第 7 项，A 已认可按自适应规避）
 （`reports/week05_acceptance.md` §4.1、§8 第 1 项）。W6 的 T11 只在**两个求解器都收敛**
 的偏压上逐点对照，不把 Newton 的继续法缺陷算成“解不一致”。
 
@@ -85,8 +87,8 @@ Gate 2 失败处理：任一 T10/T11/T13 不通过即 Gate 2 = `REJECTED`，不�
 
 冻结后 W8 只允许 GUI、联调与阻塞性 bug 修复。
 
-> **W6 顺延**：本轮按安排先做 W7，Gate 2（T11 双求解器正式对照）**未裁决**，
-> 不得据本文件宣称 Gate 2 通过。补做计划见 `reports/week07_core_freeze.md` §8。
+> **W6 已补做（2026-11-18）**：Gate 2 = PASS，见 `reports/week06_gate2.md`。
+> W7 的冻结不受影响。
 
 ## 4. W8：GUI 联调与 Windows 发布（`w08-release`）
 

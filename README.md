@@ -25,7 +25,7 @@ scripts/           B：accept_outputs（§12.4 验收器）、run_mesh_convergen
                    compare_newton_port、diagnose_newton_step
 examples/          cm / SI 同器件 YAML、W4/W5 基准配置与数据快照、SI MMS 验证器
 docs/              数学契约、接口会审、数值约定、Gummel/Newton 数学说明、API/用户/GUI 契约、B 路线图
-reports/           W2 / W3 / W4(Gate 1) / W5 验收记录
+reports/           W2 / W3 / W4(Gate 1) / W5 / W6(Gate 2) / W7 验收记录
 C2_v1/             A 的独立参考树（不被根包导入）
 ```
 
@@ -60,7 +60,7 @@ PNG 需要 matplotlib（`pyproject.toml` 的 `dev` extras 已包含）。
 | W3 | T01–T07 独立 oracle、反向 PN、`RunResult`+CLI 骨架、22 列 CSV schema、QF 口径核对 | 完成 | `reports/week03_acceptance.md` |
 | W4 | T08/T09、基准配置+快照、固定步进扫描、`run()`/CLI 接线、三文件 writer 初版 | 完成（Gate 1 = PASS） | `reports/week04_gate1.md` |
 | W5 | FD Jacobian oracle（T10）、自适应扫压与回滚（T13）、取消契约冻结、Newton 并入根包 | 完成 | `reports/week05_acceptance.md` |
-| W6 | T11 双求解器正式对照、对比脚本、writer 补齐 | **顺延**（Gate 2 未裁决） | `reports/week07_core_freeze.md` §8 |
+| W6 | T11 双求解器正式对照、`run_gates.py` 一键回归 | 完成（Gate 2 = PASS） | `reports/week06_gate2.md` |
 | W7 | refine 网格、T12/T14/T15、三文件验收器、API/YAML/CLI 与 GUI 契约冻结、CI | 完成（`w07-core-freeze`） | `reports/week07_core_freeze.md` |
 | W8 | GUI/CLI 一致性、T16/T17、Windows 打包与 T18 | 未开始 | `docs/B_roadmap.md` §4 |
 

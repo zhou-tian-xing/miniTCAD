@@ -147,9 +147,9 @@ YAML 侧是 `mesh: {type: refined, nodes: 201, refine: 20}`：
 
 ## 8. 未完成与顺延项
 
-1. **Gate 2 未裁决（W6 顺延）**：T11 双求解器正式对照（势峰值差 `≤1e-3 V`、非零终端
-   电流差 `≤1%`）没有独立跑过；W5 只给了 0.30 V 单点的前置证据
-   （`reports/week05_acceptance.md` §6）。`w07-core-freeze` 不含 Gate 2 的结论。
+1. **Gate 2 已补做（2026-11-18）**：T11 在 0.02 V 梯子上 15/15 通过（势峰值差 `3.7e-13 V`、
+   电流相对差 `5.3e-10`），Gate 2 = PASS，见 `reports/week06_gate2.md`。
+   冻结本身不依赖它，但交付时两者都可引用。
 2. **Newton 在 0.10–0.15 V 失败，原因未查清**（已证伪“台阶即原因”“Δv 太大”两个假设），
    `docs/a_b_interface_week02.md` §5 第 7 项。
 3. **A 的 `reverse_sweep.py` 未并入**根包，W6 若要覆盖反向偏压需先定口径。
