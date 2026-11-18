@@ -1,10 +1,11 @@
-"""核对根包并入的 Newton 与 `C2_v1` 里 A 的实现是否逐位一致。
+"""核对根包并入的 Newton 与 A 的参考实现是否逐位一致。
 
-两个包同名，不能在同一进程里导入，所以分两步跑再比：
+两个包同名，不能在同一进程里导入，所以分两步跑再比。A 的参考树（原 `C2_v1/`）
+已于 2026-11-18 移出仓库；要复跑需要自己把那份快照检出到任意目录：
 
 ```bash
-python scripts/compare_newton_port.py run --src src       --out .tmp/root.json
-python scripts/compare_newton_port.py run --src C2_v1/src --out .tmp/c2v1.json
+python scripts/compare_newton_port.py run --src src               --out .tmp/root.json
+python scripts/compare_newton_port.py run --src <快照>/src        --out .tmp/c2v1.json
 python scripts/compare_newton_port.py diff .tmp/root.json .tmp/c2v1.json
 ```
 
@@ -128,7 +129,7 @@ def _diff(left_path: pathlib.Path, right_path: pathlib.Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="Compare the ported Newton against A's reference implementation.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     run = sub.add_parser("run", help="run the Newton chain against one package tree")

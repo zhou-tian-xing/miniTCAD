@@ -394,7 +394,7 @@ def _print(result: Acceptance, quiet: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Accept the three fixed output files (§12.4).")
+    parser = argparse.ArgumentParser(description="Accept the three fixed output files (section 12.4).")
     parser.add_argument("directory", help="directory holding comparison.csv/.png/convergence.md")
     parser.add_argument("--expect", choices=("ACCEPTED", "REJECTED"), default=None)
     parser.add_argument("--quiet", action="store_true", help="only report failures")

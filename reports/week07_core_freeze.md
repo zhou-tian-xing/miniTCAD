@@ -37,7 +37,7 @@ YAML 侧是 `mesh: {type: refined, nodes: 201, refine: 20}`：
 
 参考量：uniform 801，`J = 4.249672901e-05 A/cm²`，`V_app = 0.30 V`，Gummel。
 
-| mesh | M | \|ΔJ\|/J | \|ΔE\|/E |
+| mesh | M | \|dJ\|/J | \|dE\|/E |
 |---|---|---|---|
 | uniform | 201 | 1.646e-03 | 4.803e-02 |
 | uniform | 401 | 2.116e-04 | 1.697e-02 |

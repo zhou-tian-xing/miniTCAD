@@ -88,11 +88,13 @@
 3. **W3 的 A 模块并入根包**：`discretization/`、`physics/recombination.py`、
    `simulation/equilibrium.py` 从 `C2_v1/src/minitcad` 同步到 `src/minitcad`，
    保持单一包（§10.1“不可形成两套独立 Mesh/State/Residual”）。
-   `C2_v1/` 保留为 A 的参考实现与对照，不再作为导入源。
+   `C2_v1/` 保留为 A 的参考实现与对照，不再作为导入源（该副本已于 2026-11-18 移出
+   仓库，见 `README.md` 目录结构一节）。
 4. **B 的 oracle 改为 QF 口径**：T06 增加“常数 `eta_n/eta_p` ⇒ 严格零电流”，
    并保留 T07 纯扩散与物理 SG 的交叉核对；新增 QF 残差与旧 `residual` 内部行的一致性测试。
 5. **精度证据**：`tests/test_oracle_qf_residual.py::test_qf_srh_avoids_cancellation_near_equilibrium`
-   在 `u=40`、`eta_n=1e-16` 时物理 `np-1` 已舍入为 0，而 QF 的 `expm1` 仍给出正速率。
+   在 `u=40`、`eta_n=1e-16` 时物理 `np-1` 只剩 1 ulp 的噪声（`0` 或 `-1.1e-16`，取决于
+   libm），而 QF 的 `expm1` 仍给出正速率。该测试只断言“信号已丢失”，不断言具体位型。
 6. **参考量契约可执行**：`test_internal_rows_are_invariant_to_the_qf_reference_shift` 对同一物理状态
    取 `(0,0)`、`(2.3,-1.7)`、`(-5,4)` 三组 `ref_n/ref_p`，内部行必须完全一致、接触行严格为 0；
    `test_core_qf_state.py::test_contact_targets_qf_honours_a_nonzero_reference` 固定
@@ -161,4 +163,5 @@ A：**已认可**（2026-11-18 认可 Newton 失败机制的诊断与「用自�
 §5 其余各项待逐条签署）
 
 B：**已签**（2026-10-25 复核 commit `b195ce5`；2026-11-03 加固复核 + 公共 API 冻结；
-2026-11-10 同步 `e6c8a5f`；2026-11-18 W7 冻结 + Gate 2 补做，根包 = 389 passed，`C2_v1` = 215 passed）
+2026-11-10 同步 `e6c8a5f`；2026-11-18 W7 冻结 + Gate 2 补做，根包 = 392 passed；
+A 的参考树当时 215 passed，该副本已于同日移出仓库）

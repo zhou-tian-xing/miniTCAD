@@ -44,7 +44,7 @@ def write_comparison_png(run, path: str | pathlib.Path) -> pathlib.Path:
 
     fig, axes = plt.subplots(3, 2, figsize=(13, 11), constrained_layout=True)
     fig.suptitle(
-        f"miniTCAD — {run.config.solver.method} — {run.decision}"
+        f"miniTCAD | {run.config.solver.method} | {run.decision}"
         f"{'' if run.accepted else ' (see convergence.md)'}\n{ORIENTATION_NOTE}",
         fontsize=10,
     )

@@ -49,5 +49,5 @@ $$
 - 中能级 SRH 的分子 `np-1` 改写为 `expm1((ref_n-ref_p)+(eta_n-eta_p))`。
 - QF 版残差 `evaluate_qf` 的 6 行 Dirichlet 直接作用在 `eta_n/eta_p` 上；
   Poisson 行仍用 `n,p` 重建值。
-- **注意**：`C2_v1` 中的旧 `residual(State,...)` 仅为历史/回归接口，W4 起
+- **注意**：A 的参考实现里的旧 `residual(State,...)` 仅为历史/回归接口，W4 起
   求解器必须调用 `evaluate_qf`/`residual_qf`（唯一 `F(X)` 原则）。

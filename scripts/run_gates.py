@@ -34,15 +34,17 @@ class Item:
 
 
 ITEMS: tuple[Item, ...] = (
-    Item("T08", 1, "0 V 平衡：mass action / 零电流 / 接触中性", ("tests/test_week04_gate1.py",)),
-    Item("T09", 1, "总电流沿空间守恒", ("tests/test_week04_gate1.py",)),
-    Item("T10", 2, "Jacobian 独立差分对照", ("tests/test_t10_jacobian.py",)),
-    Item("T11", 2, "Gummel / Newton 双求解器对照", ("tests/test_t11_dual_solver.py",)),
-    Item("T13", 2, "自适应回滚与失败记录", ("tests/test_t13_rollback.py",)),
-    Item("T12", 3, "网格收敛（T12）", ("tests/test_t12_mesh.py",)),
-    Item("T14", 3, "三文件 schema 与独立验收", ("tests/test_t14_output.py",)),
-    Item("T15", 3, "可复现性", ("tests/test_t15_reproducible.py",)),
-    Item("API", 3, "公开 API / YAML / CLI 冻结", ("tests/test_w07_freeze.py", "tests/test_public_api.py")),
+    Item("T08", 1, "0 V equilibrium: mass action / zero current / contact neutrality",
+         ("tests/test_week04_gate1.py",)),
+    Item("T09", 1, "total current conserved along x", ("tests/test_week04_gate1.py",)),
+    Item("T10", 2, "Jacobian vs independent finite differences", ("tests/test_t10_jacobian.py",)),
+    Item("T11", 2, "Gummel vs Newton cross-check", ("tests/test_t11_dual_solver.py",)),
+    Item("T13", 2, "adaptive rollback and failure records", ("tests/test_t13_rollback.py",)),
+    Item("T12", 3, "mesh convergence ladder", ("tests/test_t12_mesh.py",)),
+    Item("T14", 3, "three-file schema and independent acceptor", ("tests/test_t14_output.py",)),
+    Item("T15", 3, "reproducibility", ("tests/test_t15_reproducible.py",)),
+    Item("API", 3, "public API / YAML / CLI freeze",
+         ("tests/test_w07_freeze.py", "tests/test_public_api.py")),
 )
 
 

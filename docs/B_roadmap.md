@@ -11,14 +11,14 @@
 |---|---|---|
 | 器件/状态/单位 | `core/`、`io/units.py`、`io/config.py` | W2 冻结；公共 API 由 `tests/test_public_api.py` 钉住 |
 | 独立 oracle T01–T07 | `tests/test_oracle_*.py` | Bernoulli 用 60 位 Decimal，SG 用代数恒等式 |
-| Gummel 求解 | `solvers/gummel.py`、`solvers/convergence.py` | 从 `C2_v1` 并入根包；双判据收敛 |
+| Gummel 求解 | `solvers/gummel.py`、`solvers/convergence.py` | 从 A 的参考实现并入根包；双判据收敛 |
 | Newton 求解 | `solvers/newton.py`、`solvers/jacobian.py` | W5 并入根包；九色稀疏差分 + 行缩放 + Armijo 线搜索 |
 | T10 oracle | `verification/fd_jacobian_oracle.py` | 独立中心差分；实测 `1.65e-11` vs 阈值 `1e-4` |
 | 运行编排 | `api.py`（`run`、`write_required_outputs`）、`simulation/{dc,sweep,diagnostics}.py` | 固定步进 + 自适应回滚、协作式取消 |
 | 三文件 writer | `io/{results_csv,plot,report}.py` | 初版：22 列、6 面板、十节报告 |
 | 基准与快照 | `examples/pn_baseline_0_to_030.yaml`、`baseline_0_to_030_snapshot.json` | 7 偏压全收敛，`config_sha256` 校验 |
 
-测试基线：根包 `333 passed`，`C2_v1` 参考树 `215 passed`。
+测试基线：根包 `392 passed`（`C2_v1` 参考树当时 `215 passed`，该副本已于 2026-11-18 移出仓库）。
 
 ## 1. W5：Newton 的独立验证与自适应继续法（已完成 2026-11-10）
 
@@ -105,7 +105,7 @@ Gate 2 失败处理：任一 T10/T11/T13 不通过即 Gate 2 = `REJECTED`，不�
 |---|---|---|---|
 | `solve_newton` | W5-A1…A5 | T10/T11、Gate 2 | **已交付**（`e6c8a5f`，B 并入根包） |
 | `SolveResult.iteration_history` 每步字段 | W5-A6 | 迭代行 CSV、收敛面板 | **已交付**：`iteration/alpha/residual_norm/update_norm/status`（另含 `merit_L2`/`linear_backward_error`，不进 CSV） |
-| `solvers/convergence.py` 的 8.5 节尺度 | W5-A5 | B 的 oracle 对照 | **已交付**：`residual_scales_qf`/`scaled_update_physical`，根包与 `C2_v1` 同名 |
+| `solvers/convergence.py` 的 8.5 节尺度 | W5-A5 | B 的 oracle 对照 | **已交付**：`residual_scales_qf`/`scaled_update_physical`，根包与 A 的参考实现同名 |
 | Newton 继续法边界修复（接触投影后整流） | W6-A?（待 A 登记） | T11 的偏压覆盖范围 | 用自适应回滚兜住；T11 只在都收敛的偏压上对照 |
 | 结区局部误差修复 | W7-A1 | T12 网格收敛表 | 先给误差数据，结论等 A 修完再写 |
 

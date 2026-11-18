@@ -19,7 +19,7 @@ import sys
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="Diagnose why a Newton step fails (residual, merit, null direction).")
     parser.add_argument("--from", dest="src_V", type=float, default=0.05)
     parser.add_argument("--to", dest="dst_V", type=float, default=0.10)
     parser.add_argument("--config", default="examples/pn_baseline_0_to_030.yaml")

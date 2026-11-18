@@ -26,13 +26,16 @@ scripts/           B：accept_outputs（§12.4 验收器）、run_mesh_convergen
 examples/          cm / SI 同器件 YAML、W4/W5 基准配置与数据快照、SI MMS 验证器
 docs/              数学契约、接口会审、数值约定、Gummel/Newton 数学说明、API/用户/GUI 契约、B 路线图
 reports/           W2 / W3 / W4(Gate 1) / W5 / W6(Gate 2) / W7 验收记录
-C2_v1/             A 的独立参考树（不被根包导入）
 ```
+
+`C2_v1/`（A 在 W2–W5 之间交付代码用的参考树）已于 2026-11-18 移出仓库：它是代码传递副本，
+不是本包的组成部分，其中的验收规范已被根目录 `目的与规划.md` 取代。本仓库里凡是
+`C2_v1/...` 的路径都指那份快照，可在 `git show b95cb99:C2_v1/...` 或更早的历史里找到。
 
 ## 运行
 
 ```bash
-python -m pytest -q                              # 全量（385 passed）
+python -m pytest -q                              # 全量（392 passed）
 python -m pytest tests/test_week04_gate1.py -q   # T08/T09
 python -m pytest tests/test_t10_jacobian.py tests/test_t13_rollback.py -q   # T10/T13
 
@@ -70,7 +73,8 @@ PNG 需要 matplotlib（`pyproject.toml` 的 `dev` extras 已包含）。
 ## 与 A 的同步状态
 
 - 远端 `origin/main` 已包含 A 的 `d53871e`（W3 物理/离散）、`b195ce5`（准费米能级重构）
-  与 `e6c8a5f`（Newton + 反向扫压）；B 已同步到 `e6c8a5f`，`C2_v1` 参考树 `215 passed`。
+  与 `e6c8a5f`（Newton + 反向扫压）；B 已同步到 `e6c8a5f`。A 的参考树当时是
+  `215 passed`（见 `reports/week07_core_freeze.md`），该副本已按上节说明移出仓库。
 - 待 A 处理：Newton 在 0.10–0.15 V 失败（原因未查清）、
   `reverse_sweep.py` 的归口、`area_cm2` 可空与 `normalization.py` 命名分叉
   （见 `docs/a_b_interface_week02.md` §5、`reports/week05_acceptance.md` §8）。

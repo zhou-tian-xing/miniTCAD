@@ -25,12 +25,6 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Unit and contract tests
         run: python -m pytest -q
-      - name: A's reference tree
-        working-directory: C2_v1
-        run: |
-          python -m pip install numpy scipy pyyaml pytest
-          python -m pytest -q
-        continue-on-error: false
       - name: Baseline run and three-file acceptance
         run: |
           python -m minitcad.cli solve examples/pn_baseline_0_to_030.yaml --out runs/ci
