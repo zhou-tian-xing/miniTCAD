@@ -56,10 +56,21 @@ def _format_table(rows: list[dict]) -> list[str]:
     return lines
 
 
+def _tolerate_unencodable_stdout() -> None:
+    """表头含 `Δ`；cp1252 控制台（如 GitHub 的 Windows runner）没有这个字符。
+
+    只在写不出去时退化成 `?`，不改变能正常编码的控制台（GBK/UTF-8）的输出。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=DEFAULT_CONFIG)
     args = parser.parse_args(argv)
+    _tolerate_unencodable_stdout()
 
     config = load_config(pathlib.Path(args.config))
     reference = sample(config, MeshSpec(kind="uniform", nodes=LADDER[-1]), label="reference")

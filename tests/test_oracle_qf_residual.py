@@ -116,7 +116,11 @@ def test_residual_qf_matches_evaluation_payload():
 
 
 def test_qf_srh_avoids_cancellation_near_equilibrium():
-    """u=40、eta_n=1e-16：np-1 在双精度下舍入成 0，QF 的 expm1 仍能分辨。"""
+    """u=40、eta_n<=3e-16：np-1 只剩 0 或 ±1 ulp 的噪声，QF 的 expm1 仍能分辨。
+
+    物理路径的具体位型取决于 libm 最后一位（glibc 给 -1.1e-16，MSVC 给 0），
+    所以这里不断言位型，只断言"信号丢失"这一可移植的事实。
+    """
     u = np.array([40.0, 40.0, 40.0])
     eta_n = np.array([0.0, 1.0e-16, 3.0e-16])
     eta_p = np.zeros(3)
@@ -124,12 +128,22 @@ def test_qf_srh_avoids_cancellation_near_equilibrium():
     n = np.exp(u + eta_n)
     p = np.exp(-u - eta_p)
     physical_numerator = n * p - 1.0
-    assert physical_numerator[1] == 0.0  # 物理路径已丢失 1e-16 的信号
-    assert physical_numerator[2] == 0.0
+    signal = np.expm1(eta_n)
+
+    # 1) 物理路径的结果不超过 2 ulp(1)，即分辨率远粗于 1e-16 的信号。
+    assert np.all(np.abs(physical_numerator) <= 2.0 * np.spacing(1.0))
+    # 2) 因此它无法以 0.1% 的相对精度复现真值（QF 那条路是可以的，见下）。
+    with pytest.raises(AssertionError):
+        np.testing.assert_allclose(
+            physical_numerator[1:], signal[1:], rtol=1e-3, atol=0.0
+        )
+
+    # 3) QF 路径：分母用同一对 (n, p)，分子用 expm1，可精确复现（相对误差 <=1e-14）。
     assert np.all(qf_rate[1:] > 0.0)
-    expected = np.expm1(eta_n) / (1.0 * (n + 1.0) + 1.0 * (p + 1.0))
+    expected = signal / (1.0 * (n + 1.0) + 1.0 * (p + 1.0))
     np.testing.assert_allclose(qf_rate, expected, rtol=1e-14, atol=0.0)
-    assert srh_recombination_nd(n[1], p[1], 1.0, 1.0) == 0.0
+    # 4) 物理 SRH 同理只剩噪声：分母约 exp(40)，故速率绝对值 < 1e-30。
+    assert abs(srh_recombination_nd(n[1], p[1], 1.0, 1.0)) < 1e-30
 
 
 def test_qf_contact_targets_reconstruct_physical_contact():
