@@ -88,8 +88,24 @@ def test_solve_accepts_newton_with_adaptive_sweep(tmp_path, capsys):
     captured = capsys.readouterr().out
     assert "decision: ACCEPTED" in captured
     assert "solver  : newton" in captured
+    # 自适应模式下确实发生过回滚，摘要必须说 “rollback” 而不是 “stopped”。
+    assert "rollback:" in captured and "stopped :" not in captured
     for name in ("comparison.csv", "comparison.png", "convergence.md"):
         assert (out / name).is_file()
+
+
+def test_fixed_step_failure_is_reported_as_stopped_not_rollback(tmp_path, capsys):
+    """固定步进失败是“停止”，不是“回滚后恢复”：摘要措辞不能混。
+
+    这两种情况在 `attempts` 里长得一样（都是 FAIL），靠 `sweep.adaptive` 区分。
+    """
+    text = BASELINE_YAML.read_text(encoding="utf-8").replace("method: gummel", "method: newton")
+    config = tmp_path / "newton_fixed.yaml"
+    config.write_text(text, encoding="utf-8")
+    assert cli.main(["solve", str(config), "--out", str(tmp_path / "out")]) == 2
+    out = capsys.readouterr().out
+    assert "decision: REJECTED" in out
+    assert "stopped :" in out and "rollback:" not in out
 
 
 def test_solve_failure_is_reported_with_bias(tmp_path, capsys):

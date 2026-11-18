@@ -10,7 +10,7 @@
 
 ```bash
 cd <repo-root>
-python -m pytest -q                                   # 332 passed（W4 收口时 296）
+python -m pytest -q                                   # 333 passed（W4 收口时 296）
 python -m pytest tests/test_t10_jacobian.py tests/test_t13_rollback.py \
     tests/test_cancel_contract.py tests/test_newton_adapter.py -q    # 33 passed
 PYTHONPATH=src python -m minitcad.cli solve examples/pn_newton_adaptive_0_to_030.yaml \
@@ -83,8 +83,23 @@ FAIL at 0.1 V: LINE_SEARCH_FAILED          → decision: REJECTED
 ```
 
 原因是接触投影把左端 `η_n` 一次抬 `Δv = 1.93`，内部结点仍是旧值，第一条边被算成
-`1e12` 量级的虚假空穴通量；该行尺度随之变成 `1e12`，merit 失去分辨力。实测的可用阶跃
-上限在 `ΔV ≈ 0.02 V`：
+`1e9` 量级（残差行 `1e12`）的虚假空穴通量；该行尺度由这条通量自己算出，于是也跟着变成
+`1e12`，`|f| == scale` 让 scaled 残差读出 `1.0`，merit 失去分辨力。
+
+复现与诊断（输出全 ASCII）：
+
+```bash
+python scripts/diagnose_newton_step.py           # 默认 0.05 -> 0.10 V
+# [2] converged=False iterations=3 reason=LINE_SEARCH_FAILED
+# [3] max |jp_edges| = 1.962e+09        （源偏压 0.05 V 上是 1.837e-03）
+#     node 1 raw rows = [1.2932e+06, -4.8781e+00, -1.6047e+12]
+#     node 1 scales   = [1.0000e+06,  5.1675e+00,  1.6047e+12]   <- 尺度来自虚假通量
+#     node 1 scaled   = [1.2932, 0.944, 1.000]
+#     max scaled residual elsewhere = 9.843e-04                  <- 失败只在第 1 号结点
+# [4] 0.05 -> 0.075 V : converged=True
+```
+
+实测的可用阶跃上限在 `ΔV ≈ 0.02 V`：
 
 | 继续步长 | 0 → 0.30 V 结果 |
 |---|---|
@@ -159,7 +174,7 @@ FAIL at 0.1 V: LINE_SEARCH_FAILED          → decision: REJECTED
 | 文件 | 改动 | 验证 |
 |---|---|---|
 | 根包 `solvers/jacobian.py`、`newton.py` | 从 `C2_v1` 并入（新增）；补文档、显式异常、`diagnostics` 参数 | 七个偏压逐位一致（§2） |
-| 根包 `solvers/convergence.py` | 抽出 `residual_scales_qf`；`scaled_update` → `scaled_update_physical`（旧名保留） | 根包 332 passed |
+| 根包 `solvers/convergence.py` | 抽出 `residual_scales_qf`；`scaled_update` → `scaled_update_physical`（旧名保留） | 根包 333 passed |
 | 根包 `simulation/dc.py` | 按 `solver.method` 分派，删掉 `NotImplementedError` | `tests/test_cli.py`、`test_newton_adapter.py` |
 | 根包 `simulation/sweep.py` | 新增 `run_adaptive_sweep`；`SweepOutcome` 增加 `successful`/`reached_V` | `tests/test_t13_rollback.py` |
 | 根包 `simulation/run_result.py` | `Attempt` 增加 `note`（扫描层说明，与 `result.reason` 分工） | `tests/test_public_api.py` |

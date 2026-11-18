@@ -135,4 +135,4 @@
 A：**待签**（请确认 §5 的 1、4–9 项，尤其是 Newton 的继续法边界与 `reverse_sweep.py` 的归口）
 
 B：**已签**（2026-10-25 复核 commit `b195ce5`；2026-11-03 加固复核 + 公共 API 冻结；
-2026-11-10 同步 `e6c8a5f`，根包 `pytest -q` = 332 passed，`C2_v1` = 215 passed）
+2026-11-10 同步 `e6c8a5f`，根包 `pytest -q` = 333 passed，`C2_v1` = 215 passed）

@@ -139,11 +139,16 @@ def _solve(args: argparse.Namespace) -> int:
     if result.failure_reason is not None:
         print(f"reason  : {result.failure_reason}")
     print(f"run_id  : {result.run_id}")
-    # 自适应模式下 `attempts` 可能包含同一区段的多次尝试（回滚），因此这里说的是
-    # “尝试”而不是“偏压点”：把回滚次数如实暴露出来，别让 9/12 看起来像丢了 3 个偏压。
+    # 自适应模式下 `attempts` 可能包含同一区段的多次尝试，所以这里说的是“尝试”而不是
+    # “偏压点”。但**失败**在两种模式下的含义不同：固定步进是“停止”，自适应是“回滚后
+    # 继续”。把它们都印成 rollback 会让固定步进的一次失败看起来像被恢复了。
+    failed = len(result.attempts) - len(result.successful)
     print(f"accepted: {len(result.successful)} of {len(result.attempts)} attempts")
-    if len(result.attempts) != len(result.successful):
-        print(f"rollback: {len(result.attempts) - len(result.successful)} failed attempt(s) kept in comparison.csv")
+    if failed:
+        if config.sweep.adaptive:
+            print(f"rollback: {failed} failed attempt(s) recovered, kept in comparison.csv")
+        else:
+            print(f"stopped : sweep halted at the first failure; {failed} failed attempt(s) kept in comparison.csv")
     for name, written_path in zip(("comparison.csv", "comparison.png", "convergence.md"), written):
         print(f"  wrote {name:16s} {written_path}")
     return EXIT_OK if result.accepted else EXIT_REJECTED

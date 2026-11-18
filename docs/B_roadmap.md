@@ -18,7 +18,7 @@
 | 三文件 writer | `io/{results_csv,plot,report}.py` | 初版：22 列、6 面板、十节报告 |
 | 基准与快照 | `examples/pn_baseline_0_to_030.yaml`、`baseline_0_to_030_snapshot.json` | 7 偏压全收敛，`config_sha256` 校验 |
 
-测试基线：根包 `332 passed`，`C2_v1` 参考树 `215 passed`。
+测试基线：根包 `333 passed`，`C2_v1` 参考树 `215 passed`。
 
 ## 1. W5：Newton 的独立验证与自适应继续法（已完成 2026-11-10）
 

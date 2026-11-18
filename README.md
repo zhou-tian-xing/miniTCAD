@@ -32,7 +32,7 @@ ai_example/        单文件教学示例（与本规范无接口关系）
 ## 运行
 
 ```bash
-python -m pytest -q                              # 全量（332 passed）
+python -m pytest -q                              # 全量（333 passed）
 python -m pytest tests/test_week04_gate1.py -q   # T08/T09
 python -m pytest tests/test_t10_jacobian.py tests/test_t13_rollback.py -q   # T10/T13
 
